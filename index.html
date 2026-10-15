@@ -189,15 +189,15 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
 
     <div class="panel">
       <!-- X3D Agent -->
-      <section class="mode-panel" id="panel-agent">
+      <div class="mode-panel" id="panel-agent">
         <div class="tabs" role="tablist" data-group="agent">
           <button class="tab" role="tab" data-tab="console" aria-selected="true">Console</button>
           <button class="tab" role="tab" data-tab="chips" aria-selected="false">Chips</button>
           <button class="tab" role="tab" data-tab="saves" aria-selected="false">Saves</button>
         </div>
-        <div class="pane active scroll" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips.</div></div></div>
-        <div class="pane scroll" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
-        <div class="pane scroll" id="a-saves"><div class="saves-panel">
+        <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips.</div></div></div>
+        <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
+        <div class="pane scroll" role="tabpanel" id="a-saves"><div class="saves-panel">
           <div class="save-row"><input class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button class="save-btn" id="saveBtn">Save</button></div>
           <div class="saves-list" id="savesList"></div>
           <p class="note">Saved scenes live in this browser. Use Export .x3d to keep a copy as a file.</p>
@@ -207,26 +207,26 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <div class="btn-row"><button id="runBtn">&#9654; Run</button><button id="clearBtn">&#10005; Clear</button></div>
           <div class="hint">Enter to run &bull; Drag to orbit &bull; Scroll to zoom</div>
         </div>
-      </section>
+      </div>
 
       <!-- Kähler Viewer -->
-      <section class="mode-panel" id="panel-kahler" hidden>
+      <div class="mode-panel" id="panel-kahler" hidden>
         <div class="tabs" role="tablist" data-group="kahler">
           <button class="tab" role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
           <button class="tab" role="tab" data-tab="info" aria-selected="false" id="kTabInfo">Info</button>
           <button class="tab" role="tab" data-tab="param" aria-selected="false" id="kTabParam">Parameter</button>
         </div>
-        <div class="pane active" id="k-surfaces">
+        <div class="pane active" role="tabpanel" id="k-surfaces">
           <div class="scroll surface-list" id="surfaceList"></div>
           <div class="cm"><h2 class="cap">Curvature</h2><div class="cm-bar"></div><div class="cm-ticks"><span>K &lt; 0</span><span>K = 0</span><span>K &gt; 0</span></div></div>
         </div>
-        <div class="pane scroll" id="k-info"><div class="info-pane">
+        <div class="pane scroll" role="tabpanel" id="k-info"><div class="info-pane">
           <div class="info-row"><div class="info-key">Kähler potential φ</div><div class="info-val" id="infoEq">—</div></div>
           <div class="info-row"><div class="info-key">Curvature</div><div class="info-val" id="infoCurv">—</div></div>
           <div class="info-row"><div class="info-key">Holonomy group</div><div class="info-val" id="infoHol">—</div></div>
           <div class="info-desc" id="infoDesc">Select a surface to see its geometry.</div>
         </div></div>
-        <div class="pane scroll" id="k-param">
+        <div class="pane scroll" role="tabpanel" id="k-param">
           <div class="param-pane" id="paramPane">
             <label class="param-label" for="paramSlider">Parameter: <span id="paramName">t</span></label>
             <div class="param-row"><input type="range" id="paramSlider" min="0.05" max="3" step="0.05" value="1"><span class="param-val" id="paramDisplay">1.00</span></div>
@@ -237,7 +237,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
             <div class="param-note">This surface has no adjustable parameter.<br>Try Kähler Potential Family, Taub-NUT, or Eguchi-Hanson.</div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 </div>
@@ -1166,7 +1166,7 @@ const SURFACES = {
     build: (p) => taubNut(p) },
   eguchi_hanson: { label: 'Eguchi-Hanson Space', category: 'hyperkähler', eq: 'f² = 1 − (a/r)⁴', curv: 'Ric=0, |Rm|²∝(a/r)⁸', hol: 'Sp(1)',
     param: 'a', paramNote: 'a = bolt radius — curvature concentrates at the S² bolt at r = a',
-    desc: 'The simplest ALE gravitational instanton — a hyperkähler metric on T*CP¹. Contains a 2-sphere bolt at r=a. Curvature decays as r⁻⁸ away from the bolt.',
+    desc: 'The simplest ALE gravitational instanton — a hyperkähler metric on T*CP⁴. Contains a 2-sphere bolt at r=a. Curvature decays as r⁻⁸ away from the bolt.',
     build: (p) => eguchiHanson(52, p) },
   cy_quintic: { label: 'Calabi-Yau Quintic (slice)', category: 'hyperkähler', eq: 'Σᵢ zᵢ⁵ = 0 ⊂ CP⁴', curv: 'Ric = 0', hol: 'SU(3)', param: null,
     desc: 'Real 2-slice of the Fermat quintic — the most-studied compact CY threefold in string theory (h¹¹=1, h²¹=101). Color encodes |Ω|², the holomorphic 3-form.',
@@ -1246,12 +1246,10 @@ function setMode(next, { skipRender = false } = {}) {
   mode = next;
   document.body.dataset.mode = next;
   document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === next)));
-  $('panel-agent').hidden = next !== 'agent';
-  $('panel-kahler').hidden = next !== 'kahler';
-  $('actionsAgent').hidden = next !== 'agent';
-  $('actionsKahler').hidden = next !== 'kahler';
+  $('panel-agent').hidden = next !== 'agent';$('panel-kahler').hidden = next !== 'kahler';
+  $('actionsAgent').hidden = next !== 'agent';$('actionsKahler').hidden = next !== 'kahler';
   if (next !== 'agent') $('objList').hidden = true;
-  else if ($('objToggle').getAttribute('aria-expanded') === 'true') $('objList').hidden = false;
+  else if ($('objToggle').getAttribute('aria-expanded') === 'true')$('objList').hidden = false;
   history.replaceState(null, '', next === 'agent' ? '#agent' : `#${currentSurface}`);
   if (!skipRender) render();
 }
@@ -1266,7 +1264,7 @@ const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ??
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_');
 
-const logEl = $('log'), inp = $('inp'), runBtn = $('runBtn');
+const logEl = $('log'), inp = $('inp'), runBtn =$('runBtn');
 const agentTab = tabs('agent', (n) => { if (n === 'saves') renderSaves(); });
 
 function refreshObjList() {
@@ -1292,7 +1290,7 @@ function addLog(cls, label, text) {
   String(text).split('\n').forEach((line, i) => { if (i) d.append(document.createElement('br')); d.append(document.createTextNode(line)); });
   logEl.append(d);
   agentTab('console');
-  $('a-console').scrollTop = $('a-console').scrollHeight;
+  $('a-console').scrollTop =$('a-console').scrollHeight;
 }
 
 async function loadArchive(key) {
@@ -1378,8 +1376,7 @@ function saveScene() {
   renderSaves();
 }
 $('saveBtn').addEventListener('click', saveScene);
-$('saveName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveScene(); });
-$('exportBtn').addEventListener('click', () => downloadText('scene.x3d', scene.toX3D()));
+$('saveName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveScene(); });$('exportBtn').addEventListener('click', () => downloadText('scene.x3d', scene.toX3D()));
 
 /* ───────── Kähler UI ───────── */
 let currentSurface = 'fubini_study', currentParam = 1.0;
@@ -1400,7 +1397,7 @@ function updateInfo(id) {
   $('infoCurv').className = 'info-val' + (flat ? ' ricci0' : s.category === 'hyperkähler' ? ' hk' : '');
   $('paramPane').hidden = !s.param;
   $('noParam').hidden = !!s.param;
-  if (s.param) { $('paramName').textContent = s.param; if (s.paramNote) $('paramNote').textContent = s.paramNote; }
+  if (s.param) { $('paramName').textContent = s.param; if (s.paramNote)$('paramNote').textContent = s.paramNote; }
   ['kTabInfo', 'kTabParam'].forEach((t) => $(t).classList.toggle('hk', s.category === 'hyperkähler'));
 }
 function updateActive(id) {
