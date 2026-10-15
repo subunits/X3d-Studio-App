@@ -1,0 +1,1462 @@
+<!--
+  X3D Studio — X3D Agent + Kähler Viewer in one self-contained file.
+  Copyright 2026 Michael Listrom. Licensed under the Apache License 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0).
+  Third party: X_ite (MIT, https://github.com/create3000/x_ite), loaded from jsDelivr.
+  X3D is an ISO/IEC 19775 open standard.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>X3D Studio</title>
+<script src="https://cdn.jsdelivr.net/npm/x_ite@16.1.2/dist/x_ite.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+:root {
+  --bg: #0b0c11; --panel: #12131a; --panel2: #171822; --line: #232532; --text: #e4e6ee; --muted: #7d8294;
+  --accent: #7c3aed; --accent-l: #a78bfa;
+  --green: #10b981; --green-l: #6ee7b7; --red: #ef4444; --red-l: #fca5a5;
+  --blue: #3b82f6; --blue-l: #93c5fd; --yellow: #f59e0b; --yellow-l: #fcd34d;
+  --k: #4f6ef7; --hk: #c084fc; --cold: #38bdf8; --hot: #f97316; --ricci: #34d399;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
+}
+body[data-mode="kahler"] { --accent: #4f6ef7; --accent-l: #8da2ff; }
+html, body { height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+button { font-family: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent-l); outline-offset: 2px; }
+
+.shell { display: flex; flex-direction: column; height: 100dvh; padding-top: var(--sat); }
+
+/* header */
+header { flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px;
+  padding-left: max(16px, var(--sal)); padding-right: max(16px, var(--sar));
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.modes { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 2px; }
+.mode { border: 0; background: none; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 7px; color: var(--muted); cursor: pointer; }
+.mode[aria-selected="true"] { background: var(--accent); color: #fff; }
+.header-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.hbtn { font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 8px; border: 1px solid #333; background: #1e1e26; color: #aab; cursor: pointer; white-space: nowrap; }
+.hbtn:hover { background: #262630; color: #fff; }
+.tag { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; padding: 5px 8px; border-radius: 4px; cursor: pointer; opacity: .5; white-space: nowrap; }
+.tag[aria-pressed="true"] { opacity: 1; }
+.tag-k  { background: rgba(79,110,247,.15); color: var(--k);  border: 1px solid rgba(79,110,247,.3); }
+.tag-hk { background: rgba(192,132,252,.15); color: var(--hk); border: 1px solid rgba(192,132,252,.3); }
+
+/* layout */
+.main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.viewport { flex: 1; min-height: 0; position: relative; background: #08090d; overflow: hidden; }
+x3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.panel { flex: none; display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--line);
+  height: 46vh; overflow: hidden; padding-bottom: var(--sab); }
+.mode-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+@media (min-width: 800px) {
+  .main { flex-direction: row; }
+  .panel { width: 360px; height: 100%; border-top: 0; border-left: 1px solid var(--line); padding-bottom: 0; padding-right: var(--sar); }
+}
+@media (min-width: 1300px) { .panel { width: 390px; } }
+
+/* tabs (shared) */
+.tabs { flex: none; display: flex; background: #0e0f15; border-bottom: 1px solid var(--line); }
+.tab { flex: 1; padding: 11px 4px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted);
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--accent-l); border-bottom-color: var(--accent); }
+body[data-mode="kahler"] .tab.hk[aria-selected="true"] { color: var(--hk); border-bottom-color: var(--hk); }
+.pane { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.pane.active { display: flex; }
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+h2.cap { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+/* agent: console */
+.console-log { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.entry { border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.5; }
+.entry.user  { background: #1e1e2e; border-left: 3px solid var(--accent); color: #c4b5fd; }
+.entry.ai    { background: #0f1f18; border-left: 3px solid var(--green); color: var(--green-l); }
+.entry.error { background: #1f0f0f; border-left: 3px solid var(--red); color: var(--red-l); }
+.entry.info  { background: #0f1620; border-left: 3px solid var(--blue); color: var(--blue-l); }
+.entry.sys   { color: #777; font-size: 11px; font-style: italic; }
+.lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; opacity: .65; }
+
+/* agent: chips */
+.chips-panel { padding: 8px 12px; }
+.chip-group { margin-bottom: 12px; }
+.chip-group h2 { margin-bottom: 5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font-size: 12px; font-weight: 500; padding: 5px 10px; background: #1e1e2e; color: var(--accent-l); border-radius: 99px;
+  border: 1px solid #2d2d4e; cursor: pointer; white-space: nowrap; }
+.chip.green  { background: #0f2018; color: var(--green-l);  border-color: #1a4030; }
+.chip.blue   { background: #0f1830; color: var(--blue-l);   border-color: #1a2850; }
+.chip.yellow { background: #201a0a; color: var(--yellow-l); border-color: #3a2a10; }
+.chip.red    { background: #200f0f; color: var(--red-l);    border-color: #3a1a1a; }
+.chip:active { opacity: .7; }
+
+/* agent: saves */
+.saves-panel { padding: 10px 12px; }
+.save-row { display: flex; gap: 8px; }
+.save-input { flex: 1; min-width: 0; padding: 8px 10px; background: var(--panel2); border: 1px solid #333; border-radius: 8px; color: var(--text); font-size: 13px; outline: none; }
+.save-input:focus { border-color: var(--accent); }
+.save-btn { padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.saves-list { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+.save-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1a1a22; border: 1px solid #2a2a33; border-radius: 8px; }
+.save-item-name { flex: 1; font-size: 13px; color: #ccc; overflow-wrap: anywhere; }
+.save-item-btn { font-size: 11px; padding: 4px 8px; border: 1px solid #333; background: #222; color: #aaa; border-radius: 6px; cursor: pointer; }
+.save-item-btn:hover { background: #2a2a2a; color: #fff; }
+.note { color: var(--muted); font-size: 11px; line-height: 1.5; margin-top: 10px; font-style: italic; }
+
+/* agent: input */
+.input-area { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; background: var(--panel); border-top: 1px solid var(--line); }
+textarea { width: 100%; padding: 10px 12px; background: var(--panel2); border: 1px solid #333; border-radius: 10px; color: var(--text);
+  font: inherit; font-size: 16px; line-height: 1.4; resize: none; outline: none; -webkit-appearance: none; }
+textarea:focus { border-color: var(--accent); }
+.btn-row { display: flex; gap: 8px; }
+.btn-row button { flex: 1; padding: 11px; border: 0; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.btn-row button:active { opacity: .75; }
+.btn-row button:disabled { opacity: .4; cursor: not-allowed; }
+#runBtn { background: var(--accent); color: #fff; }
+#clearBtn { background: #222; color: #aaa; border: 1px solid #333; }
+.hint { font-size: 11px; color: var(--muted); text-align: center; }
+@media (min-width: 800px) { textarea { font-size: 13px; } }
+
+/* agent: object overlay */
+.obj-list { position: absolute; top: 8px; left: 8px; z-index: 5; min-width: 160px; max-height: 180px; overflow-y: auto; padding: 8px 10px;
+  background: rgba(0,0,0,.72); border: 1px solid #333; border-radius: 10px; font-size: 11px; color: #aaa; }
+.obj-item { padding: 3px 0; border-bottom: 1px solid #222; color: #ccc; }
+.obj-item:last-child { border-bottom: 0; }
+.obj-list h2 { margin-bottom: 6px; }
+
+/* kahler */
+.surface-list { padding: 4px 10px 8px; }
+.section-label { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; padding: 10px 6px 5px; }
+.surface-item { display: flex; flex-direction: column; justify-content: center; width: 100%; min-height: 50px; padding: 10px 12px; margin-bottom: 2px;
+  text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
+.surface-item:active { opacity: .7; }
+.surface-item.active { background: rgba(79,110,247,.12); border-color: rgba(79,110,247,.3); }
+.surface-item.active.hk { background: rgba(192,132,252,.10); border-color: rgba(192,132,252,.25); }
+.surface-name { font-size: 13px; font-weight: 500; }
+.surface-cat { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .08em; }
+.cm { flex: none; padding: 8px 16px 10px; border-top: 1px solid var(--line); }
+.cm h2 { font-family: var(--mono); margin-bottom: 5px; }
+.cm-bar { height: 6px; border-radius: 3px; margin-bottom: 4px; background: linear-gradient(to right, var(--cold), var(--ricci), var(--hot)); }
+.cm-ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.info-pane { padding: 14px 16px; }
+.info-row { margin-bottom: 12px; }
+.info-key { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+.info-val { font-family: var(--mono); font-size: 12px; line-height: 1.4; color: var(--k); word-break: break-word; }
+.info-val.hk { color: var(--hk); } .info-val.ricci0 { color: var(--ricci); }
+.info-desc { font-size: 13px; color: #94a3b8; line-height: 1.6; margin-top: 12px; }
+.param-pane { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; }
+.param-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.param-row { display: flex; align-items: center; gap: 14px; }
+input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: pointer; touch-action: none; }
+.param-val { font-family: var(--mono); font-size: 14px; color: var(--accent-l); min-width: 42px; text-align: right; }
+.param-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body data-mode="agent">
+<div class="shell">
+  <header>
+    <h1>X3D Studio</h1>
+    <div class="modes" role="tablist" aria-label="App">
+      <button class="mode" role="tab" data-mode="agent"  aria-selected="true">X3D Agent</button>
+      <button class="mode" role="tab" data-mode="kahler" aria-selected="false">Kähler Viewer</button>
+    </div>
+    <div class="header-actions" id="actionsAgent">
+      <button class="hbtn" id="objToggle" aria-expanded="false">&#9776; Objects</button>
+      <button class="hbtn" data-cmd="reset camera">&#8635; View</button>
+      <button class="hbtn" id="exportBtn">Export .x3d</button>
+    </div>
+    <div class="header-actions" id="actionsKahler" hidden>
+      <button class="tag tag-k"  id="filterK"  aria-pressed="true">KÄHLER</button>
+      <button class="tag tag-hk" id="filterHK" aria-pressed="true">HYPERKÄHLER</button>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="viewport">
+      <x3d-canvas id="canvas" contentScale="auto" update="auto"></x3d-canvas>
+      <div class="obj-list" id="objList" hidden><h2 class="cap">Scene objects</h2><div id="objListItems"></div></div>
+    </div>
+
+    <div class="panel">
+      <!-- X3D Agent -->
+      <section class="mode-panel" id="panel-agent">
+        <div class="tabs" role="tablist" data-group="agent">
+          <button class="tab" role="tab" data-tab="console" aria-selected="true">Console</button>
+          <button class="tab" role="tab" data-tab="chips" aria-selected="false">Chips</button>
+          <button class="tab" role="tab" data-tab="saves" aria-selected="false">Saves</button>
+        </div>
+        <div class="pane active scroll" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips.</div></div></div>
+        <div class="pane scroll" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
+        <div class="pane scroll" id="a-saves"><div class="saves-panel">
+          <div class="save-row"><input class="save-input" id="saveName" placeholder="Scene name" aria-label="Scene name" autocomplete="off"><button class="save-btn" id="saveBtn">Save</button></div>
+          <div class="saves-list" id="savesList"></div>
+          <p class="note">Saved scenes live in this browser. Use Export .x3d to keep a copy as a file.</p>
+        </div></div>
+        <div class="input-area">
+          <textarea id="inp" rows="2" aria-label="Command" placeholder="spawn a ruby donut… add 5 spheres in a row… night… spin…"></textarea>
+          <div class="btn-row"><button id="runBtn">&#9654; Run</button><button id="clearBtn">&#10005; Clear</button></div>
+          <div class="hint">Enter to run &bull; Drag to orbit &bull; Scroll to zoom</div>
+        </div>
+      </section>
+
+      <!-- Kähler Viewer -->
+      <section class="mode-panel" id="panel-kahler" hidden>
+        <div class="tabs" role="tablist" data-group="kahler">
+          <button class="tab" role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
+          <button class="tab" role="tab" data-tab="info" aria-selected="false" id="kTabInfo">Info</button>
+          <button class="tab" role="tab" data-tab="param" aria-selected="false" id="kTabParam">Parameter</button>
+        </div>
+        <div class="pane active" id="k-surfaces">
+          <div class="scroll surface-list" id="surfaceList"></div>
+          <div class="cm"><h2 class="cap">Curvature</h2><div class="cm-bar"></div><div class="cm-ticks"><span>K &lt; 0</span><span>K = 0</span><span>K &gt; 0</span></div></div>
+        </div>
+        <div class="pane scroll" id="k-info"><div class="info-pane">
+          <div class="info-row"><div class="info-key">Kähler potential φ</div><div class="info-val" id="infoEq">—</div></div>
+          <div class="info-row"><div class="info-key">Curvature</div><div class="info-val" id="infoCurv">—</div></div>
+          <div class="info-row"><div class="info-key">Holonomy group</div><div class="info-val" id="infoHol">—</div></div>
+          <div class="info-desc" id="infoDesc">Select a surface to see its geometry.</div>
+        </div></div>
+        <div class="pane scroll" id="k-param">
+          <div class="param-pane" id="paramPane">
+            <label class="param-label" for="paramSlider">Parameter: <span id="paramName">t</span></label>
+            <div class="param-row"><input type="range" id="paramSlider" min="0.05" max="3" step="0.05" value="1"><span class="param-val" id="paramDisplay">1.00</span></div>
+            <div class="param-note" id="paramNote">Drag to morph the surface.</div>
+          </div>
+          <div class="param-pane" id="noParam" hidden>
+            <div class="param-label">No parameter</div>
+            <div class="param-note">This surface has no adjustable parameter.<br>Try Kähler Potential Family, Taub-NUT, or Eguchi-Hanson.</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══ Viewer: hands an X3D string to X_ite ═══ */
+/* Thin wrapper around X_ite: feed it an X3D XML string, it renders it.
+ * Replaces the old "reload /scene.x3d from the server" round-trip. */
+
+function createViewer(canvas) {
+  let browser = null;
+  const ready = new Promise((resolve) => {
+    X3D(() => { browser = X3D.getBrowser(canvas); resolve(browser); });
+  });
+
+  let queue = Promise.resolve();
+  function show(xml) {
+    // Serialise loads so a fast slider drag can't interleave two replaceWorld calls.
+    queue = queue.then(async () => {
+      const b = await ready;
+      const scene = await b.createX3DFromString(xml);
+      await b.replaceWorld(scene);
+    }).catch((err) => console.error('X3D load failed:', err));
+    return queue;
+  }
+
+  return { show, ready };
+}
+
+function downloadText(filename, text, type = 'model/x3d+xml') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+
+/* ═══ X3D Agent engine (parser, shapes, scene model) ═══ */
+const Agent = (() => {
+/* Generated from app.py: vocabulary tables for the rule-based parser. */
+const DATA = {
+ "COLORS": {"red": [1.0, 0.0, 0.0], "green": [0.0, 0.8, 0.0], "blue": [0.0, 0.4, 1.0], "yellow": [1.0, 1.0, 0.0], "orange": [1.0, 0.5, 0.0], "purple": [0.5, 0.0, 0.8], "pink": [1.0, 0.4, 0.7], "magenta": [1.0, 0.0, 1.0], "cyan": [0.0, 1.0, 1.0], "teal": [0.0, 0.5, 0.5], "white": [1.0, 1.0, 1.0], "black": [0.05, 0.05, 0.05], "gray": [0.5, 0.5, 0.5], "grey": [0.5, 0.5, 0.5], "brown": [0.5, 0.25, 0.1], "gold": [1.0, 0.84, 0.0], "silver": [0.75, 0.75, 0.75], "lime": [0.2, 1.0, 0.0], "indigo": [0.29, 0.0, 0.51], "turquoise": [0.25, 0.88, 0.82], "crimson": [0.86, 0.08, 0.24], "coral": [1.0, 0.5, 0.31], "salmon": [0.98, 0.5, 0.45], "navy": [0.0, 0.0, 0.5], "maroon": [0.5, 0.0, 0.0], "olive": [0.5, 0.5, 0.0], "tan": [0.82, 0.71, 0.55], "beige": [0.96, 0.96, 0.86], "ivory": [1.0, 1.0, 0.94], "ruby": [0.88, 0.07, 0.37], "emerald": [0.31, 0.78, 0.47], "sapphire": [0.06, 0.32, 0.73], "amber": [1.0, 0.75, 0.0], "bronze": [0.8, 0.5, 0.2], "copper": [0.72, 0.45, 0.2], "neon": [0.22, 1.0, 0.08], "electric": [0.0, 0.6, 1.0], "hot": [1.0, 0.07, 0.57], "dark": [0.15, 0.15, 0.15], "light": [0.85, 0.85, 0.85], "lavender": [0.71, 0.49, 0.86], "mint": [0.6, 1.0, 0.8], "peach": [1.0, 0.8, 0.64], "rose": [1.0, 0.3, 0.5], "lilac": [0.78, 0.64, 0.78], "chartreuse": [0.5, 1.0, 0.0], "aqua": [0.0, 1.0, 1.0], "sand": [0.76, 0.7, 0.5], "rust": [0.72, 0.25, 0.05], "scarlet": [1.0, 0.14, 0.0], "violet": [0.56, 0.0, 1.0], "plum": [0.56, 0.27, 0.52], "slate": [0.44, 0.5, 0.56], "cream": [1.0, 0.99, 0.82], "jade": [0.0, 0.66, 0.42], "cobalt": [0.0, 0.28, 0.67], "magma": [0.9, 0.2, 0.0], "ice": [0.8, 0.95, 1.0], "lemon": [1.0, 0.97, 0.0], "golden": [1.0, 0.84, 0.0], "wine": [0.45, 0.0, 0.13], "transparent": [0.5, 0.5, 0.5]},
+ "TWO_WORD_COLORS": {"hot pink": [1.0, 0.07, 0.57], "dark red": [0.55, 0.0, 0.0], "dark blue": [0.0, 0.0, 0.55], "dark green": [0.0, 0.39, 0.0], "dark purple": [0.25, 0.0, 0.4], "dark gray": [0.2, 0.2, 0.2], "light blue": [0.53, 0.81, 0.98], "light green": [0.56, 0.93, 0.56], "light pink": [1.0, 0.71, 0.76], "light gray": [0.83, 0.83, 0.83], "neon green": [0.22, 1.0, 0.08], "neon pink": [1.0, 0.08, 0.58], "neon yellow": [1.0, 1.0, 0.0], "neon orange": [1.0, 0.45, 0.0], "neon blue": [0.1, 0.4, 1.0], "electric blue": [0.0, 0.6, 1.0], "electric green": [0.0, 1.0, 0.2], "deep purple": [0.29, 0.0, 0.51], "deep blue": [0.0, 0.0, 0.7], "deep red": [0.6, 0.0, 0.0], "bright orange": [1.0, 0.65, 0.0], "bright yellow": [1.0, 1.0, 0.2], "bright green": [0.0, 1.0, 0.2], "sky blue": [0.53, 0.81, 0.98], "forest green": [0.13, 0.55, 0.13], "lime green": [0.2, 1.0, 0.0], "baby blue": [0.54, 0.81, 0.94], "baby pink": [1.0, 0.85, 0.88], "ocean blue": [0.0, 0.47, 0.75], "fire red": [1.0, 0.15, 0.0], "fire orange": [1.0, 0.4, 0.0], "ice blue": [0.8, 0.95, 1.0], "rose gold": [0.91, 0.67, 0.62], "blood red": [0.65, 0.0, 0.0], "mint green": [0.6, 1.0, 0.8], "sand brown": [0.76, 0.7, 0.5], "pale blue": [0.69, 0.87, 0.9], "pale pink": [0.98, 0.85, 0.87]},
+ "SIZES": {"microscopic": 0.1, "atomic": 0.1, "invisible": 0.05, "tiny": 0.25, "mini": 0.3, "miniature": 0.3, "petite": 0.35, "small": 0.5, "little": 0.5, "compact": 0.5, "slim": 0.5, "medium": 0.8, "normal": 0.8, "average": 0.8, "standard": 0.8, "big": 1.3, "large": 1.5, "tall": 1.5, "wide": 1.5, "thick": 1.3, "huge": 2.0, "giant": 2.5, "enormous": 3.0, "massive": 3.5, "colossal": 4.0, "titanic": 4.5, "immense": 3.0, "grand": 2.0, "towering": 2.5},
+ "POSITIONS": {"far left": [-6.0, 0.0, 0.0], "far right": [6.0, 0.0, 0.0], "far above": [0.0, 6.0, 0.0], "far below": [0.0, -6.0, 0.0], "far behind": [0.0, 0.0, -6.0], "far front": [0.0, 0.0, 6.0], "top left": [-3.0, 3.0, 0.0], "top right": [3.0, 3.0, 0.0], "bottom left": [-3.0, -3.0, 0.0], "bottom right": [3.0, -3.0, 0.0], "upper left": [-3.0, 3.0, 0.0], "upper right": [3.0, 3.0, 0.0], "lower left": [-3.0, -3.0, 0.0], "lower right": [3.0, -3.0, 0.0], "on top": [0.0, 3.5, 0.0], "up high": [0.0, 5.0, 0.0], "way up": [0.0, 6.0, 0.0], "way down": [0.0, -6.0, 0.0], "in front": [0.0, 0.0, 4.0], "in back": [0.0, 0.0, -4.0], "underground": [0.0, -4.0, 0.0], "floating": [0.0, 4.0, 0.0], "overhead": [0.0, 5.0, 0.0], "left": [-3.0, 0.0, 0.0], "right": [3.0, 0.0, 0.0], "above": [0.0, 3.0, 0.0], "up": [0.0, 3.0, 0.0], "high": [0.0, 4.0, 0.0], "below": [0.0, -3.0, 0.0], "down": [0.0, -3.0, 0.0], "beneath": [0.0, -3.0, 0.0], "under": [0.0, -3.0, 0.0], "behind": [0.0, 0.0, -3.0], "back": [0.0, 0.0, -3.0], "front": [0.0, 0.0, 3.0], "forward": [0.0, 0.0, 3.0], "near": [0.0, 0.0, 3.0], "center": [0.0, 0.0, 0.0], "middle": [0.0, 0.0, 0.0], "here": [0.0, 0.0, 0.0], "origin": [0.0, 0.0, 0.0]},
+ "SHAPE_ALIASES": {"sphere": "sphere", "ball": "sphere", "orb": "sphere", "globe": "sphere", "bubble": "sphere", "marble": "sphere", "bead": "sphere", "planet": "sphere", "moon": "sphere", "cone": "cone", "pyramid": "cone", "triangle": "cone", "hat": "cone", "spike": "cone", "tip": "cone", "funnel": "cone", "mountain": "cone", "cylinder": "cylinder", "tube": "cylinder", "pipe": "cylinder", "pillar": "cylinder", "column": "cylinder", "barrel": "cylinder", "rod": "cylinder", "pole": "cylinder", "straw": "cylinder", "box": "box", "cube": "box", "block": "box", "brick": "box", "square": "box", "rectangle": "box", "crate": "box", "chest": "box", "slab": "box", "tile": "box", "torus": "torus", "donut": "torus", "doughnut": "torus", "ring": "torus", "loop": "torus", "hoop": "torus", "wreath": "torus", "bracelet": "torus", "life preserver": "torus", "tetrahedron": "tetrahedron", "diamond": "tetrahedron", "gem": "tetrahedron", "crystal": "tetrahedron", "prism": "tetrahedron", "octahedron": "octahedron", "d8": "octahedron", "double pyramid": "octahedron", "bipyramid": "octahedron", "icosahedron": "icosahedron", "d20": "icosahedron", "geodesic": "icosahedron", "soccer": "icosahedron", "star": "star", "asterisk": "star", "burst": "star", "sparkle": "star", "starburst": "star", "arrow": "arrow", "pointer": "arrow", "chevron": "arrow", "plane": "plane", "flat": "plane", "floor": "plane", "ground": "plane", "disc": "plane", "disk": "plane", "pad": "plane", "platform": "plane", "sheet": "plane", "surface": "plane", "ellipsoid": "ellipsoid", "egg": "ellipsoid", "oval": "ellipsoid", "blob": "ellipsoid", "oblong": "ellipsoid", "helix": "helix", "spiral": "helix", "coil": "helix", "spring": "helix", "screw": "helix", "capsule": "capsule", "pill": "capsule", "lozenge": "capsule", "dodecahedron": "dodecahedron", "d12": "dodecahedron", "cross": "cross", "plus": "cross", "crucifix": "cross", "crosshair": "cross", "crescent": "crescent", "moon crescent": "crescent", "torus knot": "torusknot", "knot": "torusknot", "pretzel": "torusknot", "spheres": "sphere", "balls": "sphere", "orbs": "sphere", "cones": "cone", "pyramids": "cone", "cylinders": "cylinder", "tubes": "cylinder", "pipes": "cylinder", "boxes": "box", "cubes": "box", "blocks": "box", "bricks": "box", "toruses": "torus", "donuts": "torus", "rings": "torus", "tetrahedra": "tetrahedron", "diamonds": "tetrahedron", "octahedra": "octahedron", "icosahedra": "icosahedron", "dodecahedra": "dodecahedron", "stars": "star", "asterisks": "star", "arrows": "arrow", "pointers": "arrow", "capsules": "capsule", "pills": "capsule", "crosses": "cross", "crescents": "crescent", "helices": "helix", "spirals": "helix", "coils": "helix", "ellipsoids": "ellipsoid", "eggs": "ellipsoid", "planes": "plane", "discs": "plane", "disks": "plane", "torus knots": "torusknot", "knots": "torusknot"},
+ "CLEAR_PHRASES": ["clear", "remove all", "delete all", "wipe", "empty", "start over", "start fresh", "start from scratch", "scratch this", "clean slate", "erase", "nuke", "blow it up", "destroy", "fresh start", "new scene"],
+ "REMOVE_PHRASES": ["remove", "delete", "undo", "take away", "get rid of", "pop", "erase last", "remove last", "delete last"],
+ "INSPECT_PHRASES": ["what's in", "what is in", "list", "show objects", "what do i have", "objects", "inspect", "describe scene", "what's here", "inventory", "count", "how many"],
+ "ARCHIVE_EXAMPLES": {"hello": "https://www.web3d.org/x3d/content/examples/HelloWorld.x3d", "helloworld": "https://www.web3d.org/x3d/content/examples/HelloWorld.x3d", "ball": "https://www.web3d.org/x3d/content/examples/Basic/UniversalMediaMaterials/UniversalMediaMaterials.x3d", "materials": "https://www.web3d.org/x3d/content/examples/Basic/UniversalMediaMaterials/UniversalMediaMaterials.x3d", "lights": "https://www.web3d.org/x3d/content/examples/Basic/LightSources/DirectionalLightExample.x3d", "fog": "https://www.web3d.org/x3d/content/examples/Basic/EnvironmentalEffects/Fog.x3d", "text": "https://www.web3d.org/x3d/content/examples/Basic/Text/HelloWorldCommented.x3d"},
+ "LIGHT_BRIGHT": ["brighter", "more light", "increase light", "brighten", "lighter", "turn up light"],
+ "LIGHT_DIM": ["dimmer", "less light", "decrease light", "dim", "darker", "turn down light", "darken"],
+ "LIGHT_NIGHT": ["night", "nighttime", "night mode", "dark mode", "moonlight"],
+ "LIGHT_DAY": ["day", "daytime", "daylight", "sunny", "noon", "midday"],
+ "LIGHT_SUNRISE": ["sunrise", "dawn", "golden hour", "warm light", "sunset", "dusk"],
+ "LIGHT_NEON": ["neon", "neon light", "club", "disco", "rave", "blacklight"],
+ "LIGHT_SPOT": ["spotlight", "spot light", "add spotlight", "add a spotlight", "add a light", "add some light", "add lights", "add a pointlight", "add point light"],
+ "CAM_RESET": ["reset camera", "reset view", "default view", "reset viewport", "default camera"],
+ "CAM_ZOOM_IN": ["zoom in", "move closer"],
+ "CAM_ZOOM_OUT": ["zoom out", "pull back", "move back"],
+ "CAM_TOP": ["top view", "bird's eye", "birds eye", "bird eye", "look down", "view from top", "overhead view", "from above"],
+ "CAM_FRONT": ["front view", "look from front", "face on", "straight on"],
+ "CAM_SIDE": ["side view", "look from side", "profile view", "profile", "from the side"],
+ "CAM_ISO": ["isometric", "iso view", "3/4 view", "three quarter", "3d view"],
+ "ANIM_SPIN": ["spin", "rotate", "spinning", "rotating", "make it spin", "make it rotate", "animate"],
+ "ANIM_BOUNCE": ["bounce", "bouncing", "bob", "bobbing", "oscillate", "float up and down"],
+ "ANIM_PULSE": ["pulse", "pulsing", "breathe", "breathing", "throb", "grow and shrink"],
+ "ANIM_STOP": ["stop", "freeze", "stop animation", "stop spinning", "stop bouncing", "no animation"]
+};
+
+/* X3D Agent engine — a browser port of app.py.
+ * Parses a natural-language prompt, mutates an in-memory scene model,
+ * and serialises that model to an X3D XML string. No server involved. */
+
+const mod = (n, m) => ((n % m) + m) % m;
+const f3 = (n) => n.toFixed(3);
+const has = (t, phrases) => phrases.some((p) => t.includes(p));
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordRe = (w) => new RegExp('\\b' + esc(w) + '\\b');
+
+// Python's random.seed(42) isn't available in JS; a seeded PRNG keeps "scattered" layouts stable.
+function mulberry32(seed) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── Parsers ───────────────────────────────────────────────────────────────── */
+
+const TWO_WORD_RE = /(hot|dark|light|neon|electric|deep|bright|pale|sky|forest|lime|baby|ocean|fire|ice|rose|blood|mint|sand)\s+(red|green|blue|pink|orange|purple|yellow|cyan|gray|grey|brown|white|black|gold)/;
+const COORD_RE = /(?:at|position|pos|translate|move to|place at|put at)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/;
+const DEFAULT_COLOR = [0.4, 0.6, 1.0];
+
+function parseColor(t) {
+  const two = t.match(TWO_WORD_RE);
+  if (two) {
+    return DATA.TWO_WORD_COLORS[two[1] + ' ' + two[2]] || DATA.COLORS[two[2]] || DEFAULT_COLOR;
+  }
+  const hex = t.match(/#([0-9a-f]{6}|[0-9a-f]{3})\b/);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+  }
+  const rgb = t.match(/(?:rgb|color)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  if (rgb) {
+    let v = [1, 2, 3].map((i) => parseFloat(rgb[i]));
+    if (Math.max(...v) > 1) v = v.map((x) => x / 255);
+    return v.map((x) => Math.min(1, Math.max(0, x)));
+  }
+  for (const [name, c] of Object.entries(DATA.COLORS)) {
+    if (wordRe(name).test(t)) return c;
+  }
+  return DEFAULT_COLOR;
+}
+
+function parseSize(t) {
+  const m = t.match(/(?:size|radius|scale|width|height|length)\s+([\d.]+)/);
+  if (m) return Math.max(0.05, Math.min(parseFloat(m[1]), 5.0));
+  for (const [word, s] of Object.entries(DATA.SIZES)) {
+    if (wordRe(word).test(t)) return s;
+  }
+  return 0.8;
+}
+
+function parsePosition(t) {
+  const c = t.match(COORD_RE);
+  if (c) return [parseFloat(c[1]), parseFloat(c[2]), parseFloat(c[3])];
+  const phrases = Object.entries(DATA.POSITIONS).sort((a, b) => b[0].length - a[0].length);
+  for (const [phrase, pos] of phrases) if (t.includes(phrase)) return pos;
+  return [0, 0, 0];
+}
+
+function parseRotation(t) {
+  const m = t.match(/rotat\w*\s+([-\d.]+)\s*(?:degrees?|deg)?\s*(?:around|along|on)?\s*(x|y|z)?/);
+  if (m) {
+    const rad = (parseFloat(m[1]) * Math.PI) / 180;
+    const axis = m[2] || 'y';
+    const ax = axis === 'x' ? [1, 0, 0] : axis === 'z' ? [0, 0, 1] : [0, 1, 0];
+    return [...ax, rad];
+  }
+  if (/\b(tilt|tilted|lean|leaning|sideways|on its side|on its back)\b/.test(t)) return [0, 0, 1, Math.PI / 2];
+  if (/\b(upside down|inverted|flipped)\b/.test(t)) return [0, 0, 1, Math.PI];
+  if (/\b(diagonal|angled|slanted)\b/.test(t)) return [0, 0, 1, Math.PI / 4];
+  return null;
+}
+
+function parseCount(t, stripCoords = '') {
+  const s = stripCoords ? t.replace(stripCoords, '') : t;
+  const m = s.match(/\b(\d+)\b/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 2 && n <= 20) return n;
+  }
+  const words = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+  for (const [w, n] of Object.entries(words)) if (wordRe(w).test(t)) return n;
+  return 1;
+}
+
+function parseArrangement(t) {
+  if (/\b(in a row|row|line|lined up|horizontal)\b/.test(t)) return 'row';
+  if (/\b(in a circle|circle|ring|circular|around)\b/.test(t)) return 'circle';
+  if (/\b(grid|matrix|formation)\b/.test(t)) return 'grid';
+  if (/\b(random|scattered|spread|everywhere)\b/.test(t)) return 'random';
+  return 'row';
+}
+
+function parseAnimation(t) {
+  if (has(t, DATA.ANIM_STOP)) return 'stop';
+  if (has(t, DATA.ANIM_SPIN)) return 'spin';
+  if (has(t, DATA.ANIM_BOUNCE)) return 'bounce';
+  if (has(t, DATA.ANIM_PULSE)) return 'pulse';
+  return null;
+}
+
+const colorName = (c) => {
+  const hit = Object.entries(DATA.COLORS).find(([, v]) => v[0] === c[0] && v[1] === c[1] && v[2] === c[2]);
+  return hit ? hit[0] : 'colored';
+};
+
+const BOX_WORDS = ['box', 'cube', 'block', 'brick', 'square', 'rectangle', 'crate', 'chest', 'slab', 'tile'];
+const aliasesByLength = Object.entries(DATA.SHAPE_ALIASES).sort((a, b) => b[0].length - a[0].length);
+const archiveKeys = Object.keys(DATA.ARCHIVE_EXAMPLES);
+
+function parsePrompt(text) {
+  const t = text.toLowerCase().trim();
+  if (!t) return { action: 'help', message: 'Try: add a red sphere, night, spin, clear' };
+
+  if (has(t, DATA.CLEAR_PHRASES)) return { action: 'clear' };
+  if (has(t, DATA.REMOVE_PHRASES)) return { action: 'remove_last' };
+  if (has(t, DATA.INSPECT_PHRASES)) return { action: 'inspect' };
+
+  const arch = t.match(new RegExp('\\b(load|fetch|import|open|get)\\b.*\\b(' + archiveKeys.join('|') + ')\\b'));
+  if (arch) return { action: 'load_archive', key: arch[2] };
+
+  if (has(t, DATA.CAM_RESET)) return { action: 'camera', view: 'reset' };
+  if (has(t, DATA.CAM_TOP)) return { action: 'camera', view: 'top' };
+  if (has(t, DATA.CAM_FRONT)) return { action: 'camera', view: 'front' };
+  if (has(t, DATA.CAM_SIDE)) return { action: 'camera', view: 'side' };
+  if (has(t, DATA.CAM_ISO)) return { action: 'camera', view: 'iso' };
+  if (has(t, DATA.CAM_ZOOM_IN)) return { action: 'camera', view: 'zoom_in' };
+  if (has(t, DATA.CAM_ZOOM_OUT)) return { action: 'camera', view: 'zoom_out' };
+
+  // Detect shape before lighting so "neon torus knot" is a shape, not a light preset.
+  let shapeFound = null;
+  for (const [alias, canonical] of aliasesByLength) {
+    if (wordRe(alias).test(t)) { shapeFound = canonical; break; }
+  }
+
+  if (shapeFound === null) {
+    if (has(t, DATA.LIGHT_SPOT)) return { action: 'add_light' };
+    if (has(t, DATA.LIGHT_NIGHT)) return { action: 'lighting', preset: 'night' };
+    if (has(t, DATA.LIGHT_SUNRISE)) return { action: 'lighting', preset: 'sunrise' };
+    if (has(t, DATA.LIGHT_DAY)) return { action: 'lighting', preset: 'day' };
+    if (/\bsun\b/.test(t)) return { action: 'lighting', preset: 'day' };
+    if (has(t, DATA.LIGHT_NEON)) return { action: 'lighting', preset: 'neon' };
+    if (has(t, DATA.LIGHT_BRIGHT)) return { action: 'lighting', preset: 'brighter' };
+    if (has(t, DATA.LIGHT_DIM)) return { action: 'lighting', preset: 'dimmer' };
+  }
+
+  const anim = parseAnimation(t);
+  if (anim && shapeFound === null) return { action: 'animate', anim };
+
+  const shape = shapeFound || 'box';
+  const color = parseColor(t);
+  const size = parseSize(t);
+  const position = parsePosition(t);
+  const rotation = parseRotation(t);
+  const coordM = t.match(/(?:at|position|pos|translate|move to|place at|put at)\s+([-\d.]+\s+[-\d.]+\s+[-\d.]+)/);
+  const count = parseCount(t, coordM ? coordM[0] : '');
+  const arrangement = count > 1 ? parseArrangement(t) : null;
+  const transparent = has(t, ['transparent', 'glass', 'see through', 'see-through', 'translucent', 'ghostly', 'ghost', 'crystal clear', 'invisible']);
+
+  const cname = colorName(color);
+  let message;
+  if (count > 1) {
+    const plural = /[xsz]$/.test(shape) ? shape + 'es' : shape + 's';
+    message = `Added ${count} ${cname} ${plural} ${arrangement === 'random' ? 'scattered' : 'in a ' + arrangement}.`;
+  } else {
+    message = `Added ${cname} ${shape} (size=${size.toFixed(2)}) at (${position.map((n) => n.toFixed(1)).join(', ')}).`;
+  }
+  const ambiguous = shape === 'box' && !has(t, BOX_WORDS) && !has(t, ['make a scene', 'make something']);
+
+  return {
+    action: 'add', shape, color, position, size, rotation,
+    transparency: transparent ? 0.6 : 0.0,
+    animation: anim, count, arrangement, message, ambiguous,
+  };
+}
+
+function multiPositions(count, arrangement, base, size) {
+  const [x0, y0, z0] = base;
+  const spacing = size * 2.5;
+  const out = [];
+  if (arrangement === 'row') {
+    const totalW = (count - 1) * spacing;
+    for (let i = 0; i < count; i++) out.push([x0 - totalW / 2 + i * spacing, y0, z0]);
+  } else if (arrangement === 'circle') {
+    const radius = Math.max((spacing * count) / (2 * Math.PI), spacing);
+    for (let i = 0; i < count; i++) {
+      const a = (2 * Math.PI * i) / count;
+      out.push([x0 + radius * Math.cos(a), y0, z0 + radius * Math.sin(a)]);
+    }
+  } else if (arrangement === 'grid') {
+    const cols = Math.ceil(Math.sqrt(count));
+    for (let i = 0; i < count; i++) {
+      const row = Math.floor(i / cols), col = i % cols;
+      out.push([x0 + col * spacing - ((cols - 1) * spacing) / 2, y0, z0 + row * spacing]);
+    }
+  } else {
+    const rnd = mulberry32(42);
+    const u = (a, b) => a + (b - a) * rnd();
+    for (let i = 0; i < count; i++) out.push([x0 + u(-4, 4), y0 + u(-1, 2), z0 + u(-2, 2)]);
+  }
+  return out;
+}
+
+/* ── Shape geometry (all windings CCW from outside) ────────────────────────── */
+
+const mat = (r, g, b, tr) =>
+  `<Appearance><Material diffuseColor="${f3(r)} ${f3(g)} ${f3(b)}" specularColor="0.4 0.4 0.4" shininess="0.6" transparency="${tr.toFixed(2)}"/></Appearance>`;
+
+const ifs = (pts, idxs, crease = 1.5) =>
+  `<IndexedFaceSet coordIndex="${idxs.join(' ')}" solid="false" creaseAngle="${crease}" normalPerVertex="true">` +
+  `<Coordinate point="${pts.map((p) => `${f3(p[0])} ${f3(p[1])} ${f3(p[2])}`).join(' ')}"/></IndexedFaceSet>`;
+
+const shapeXml = (geo, m) => `      <Shape>${geo}${m}</Shape>\n`;
+
+function wrap(body, pos, rot, id, extraAttrs = '') {
+  const r = rot ? ` rotation="${rot[0]} ${rot[1]} ${rot[2]} ${rot[3].toFixed(4)}"` : '';
+  return `    <Transform DEF="obj_${id}" translation="${f3(pos[0])} ${f3(pos[1])} ${f3(pos[2])}"${extraAttrs}${r}>\n${body}    </Transform>\n`;
+}
+
+function buildTorus(size) {
+  const R = size, r = size * 0.34, U = 28, V = 16;
+  const pts = [], idxs = [];
+  for (let i = 0; i < U; i++) {
+    const a = (2 * Math.PI * i) / U;
+    for (let j = 0; j < V; j++) {
+      const b = (2 * Math.PI * j) / V;
+      pts.push([(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]);
+    }
+  }
+  for (let i = 0; i < U; i++) {
+    const ni = (i + 1) % U;
+    for (let j = 0; j < V; j++) {
+      const nj = (j + 1) % V;
+      idxs.push(`${i * V + j} ${i * V + nj} ${ni * V + nj} ${ni * V + j} -1`);
+    }
+  }
+  return [pts, idxs];
+}
+
+function tubeSweep(path, tubeR, closed) {
+  const T = 8, n = path.length;
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const norm = (v) => { const L = Math.hypot(v[0], v[1], v[2]); return L > 1e-9 ? [v[0] / L, v[1] / L, v[2] / L] : [1, 0, 0]; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const prev = closed ? path[mod(i - 1, n)] : path[Math.max(0, i - 1)];
+    const next = closed ? path[(i + 1) % n] : path[Math.min(n - 1, i + 1)];
+    const tan = norm(sub(next, prev));
+    const up = Math.abs(tan[1]) < 0.85 ? [0, 1, 0] : [1, 0, 0];
+    const N = norm(cross(tan, up));
+    const B = norm(cross(tan, N));
+    const [cx, cy, cz] = path[i];
+    for (let j = 0; j < T; j++) {
+      const a = (2 * Math.PI * j) / T, ca = Math.cos(a), sa = Math.sin(a);
+      pts.push([cx + tubeR * (ca * N[0] + sa * B[0]), cy + tubeR * (ca * N[1] + sa * B[1]), cz + tubeR * (ca * N[2] + sa * B[2])]);
+    }
+  }
+  const idxs = [];
+  const rings = closed ? n : n - 1;
+  for (let i = 0; i < rings; i++) {
+    const ni = closed ? (i + 1) % n : i + 1;
+    for (let j = 0; j < T; j++) {
+      const nj = (j + 1) % T;
+      idxs.push(`${i * T + j} ${i * T + nj} ${ni * T + nj} ${ni * T + j} -1`);
+    }
+  }
+  return [pts, idxs];
+}
+
+function buildTetrahedron(s) {
+  const h = s * Math.sqrt(2 / 3), r = s / Math.sqrt(3);
+  return [
+    [[r, -h / 2, 0], [-r / 2, -h / 2, (r * Math.sqrt(3)) / 2], [-r / 2, -h / 2, -(r * Math.sqrt(3)) / 2], [0, h, 0]],
+    ['0 2 1 -1', '0 1 3 -1', '1 2 3 -1', '0 3 2 -1'],
+  ];
+}
+
+function buildOctahedron(s) {
+  return [
+    [[s, 0, 0], [-s, 0, 0], [0, s, 0], [0, -s, 0], [0, 0, s], [0, 0, -s]],
+    ['2 0 4 -1', '2 4 1 -1', '2 1 5 -1', '2 5 0 -1', '3 4 0 -1', '3 1 4 -1', '3 5 1 -1', '3 0 5 -1'],
+  ];
+}
+
+function buildIcosahedron(s) {
+  const t = (1 + Math.sqrt(5)) / 2, nl = Math.sqrt(1 + t * t);
+  const raw = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
+  const pts = raw.map(([x, y, z]) => [(x / nl) * s, (y / nl) * s, (z / nl) * s]);
+  const f = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+    3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
+  const idxs = [];
+  for (let i = 0; i < f.length; i += 3) idxs.push(`${f[i]} ${f[i + 1]} ${f[i + 2]} -1`);
+  return [pts, idxs];
+}
+
+function buildDodecahedron(s) {
+  const p = (1 + Math.sqrt(5)) / 2, b = 1 / p, v = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * s, sy * s, sz * s]);
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([0, sy * b * s, sz * p * s]);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) v.push([sx * b * s, sy * p * s, 0]);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * p * s, 0, sz * b * s]);
+  const faces = [[0, 8, 4, 14, 12], [0, 16, 2, 10, 8], [0, 12, 1, 17, 16], [1, 12, 14, 5, 9], [1, 9, 11, 3, 17], [2, 13, 15, 6, 10],
+    [2, 16, 17, 3, 13], [3, 11, 7, 15, 13], [4, 8, 10, 6, 18], [4, 18, 19, 5, 14], [5, 19, 7, 11, 9], [6, 15, 7, 19, 18]];
+  return [v, faces.map((f) => f.join(' ') + ' -1')];
+}
+
+function buildStar(s) {
+  const OR = s, IR = s * 0.4, d = s * 0.25, N = 5, n = N * 2;
+  const front = [], back = [];
+  for (let i = 0; i < n; i++) {
+    const ang = (Math.PI / N) * i - Math.PI / 2, r = i % 2 === 0 ? OR : IR;
+    front.push([Math.cos(ang) * r, Math.sin(ang) * r, d]);
+    back.push([Math.cos(ang) * r, Math.sin(ang) * r, -d]);
+  }
+  const pts = [...front, [0, 0, d], ...back, [0, 0, -d]];
+  const fc = n, bc = 2 * n + 1, idxs = [];
+  for (let i = 0; i < n; i++) idxs.push(`${fc} ${i} ${(i + 1) % n} -1`);
+  for (let i = 0; i < n; i++) idxs.push(`${bc} ${n + 1 + ((i + 1) % n)} ${n + 1 + i} -1`);
+  for (let i = 0; i < n; i++) { const ni = (i + 1) % n; idxs.push(`${i} ${ni} ${n + 1 + ni} ${n + 1 + i} -1`); }
+  return [pts, idxs];
+}
+
+function buildArrow(s) {
+  const sw = s * 0.16, sh = s * 1.1, hw = s * 0.4, hh = s * 0.75;
+  const pts = [[-sw, 0, -sw], [sw, 0, -sw], [sw, 0, sw], [-sw, 0, sw], [-sw, sh, -sw], [sw, sh, -sw], [sw, sh, sw], [-sw, sh, sw],
+    [-hw, sh, -hw], [hw, sh, -hw], [hw, sh, hw], [-hw, sh, hw], [0, sh + hh, 0]];
+  return [pts, ['3 2 1 0 -1', '0 1 5 4 -1', '1 2 6 5 -1', '2 3 7 6 -1', '3 0 4 7 -1', '11 10 9 8 -1',
+    '12 8 9 -1', '12 9 10 -1', '12 10 11 -1', '12 11 8 -1']];
+}
+
+function buildCapsule(s) {
+  const r = s * 0.44, h = s * 1.2, U = 20, V = 10;
+  const pts = [], idxs = [];
+  for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([r * Math.cos(a), h / 2, r * Math.sin(a)]); }
+  for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([r * Math.cos(a), -h / 2, r * Math.sin(a)]); }
+  for (let i = 0; i < U; i++) { const ni = (i + 1) % U; idxs.push(`${i} ${ni} ${U + ni} ${U + i} -1`); }
+
+  const addCap = (sign) => {
+    const base = pts.length;
+    for (let lat = 1; lat < V; lat++) {
+      const phi = ((Math.PI / 2) * lat) / V, rr = r * Math.cos(phi), yy = sign * (h / 2 + r * Math.sin(phi));
+      for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([rr * Math.cos(a), yy, rr * Math.sin(a)]); }
+    }
+    const tip = pts.length;
+    pts.push([0, sign * (h / 2 + r), 0]);
+    const ring0 = sign > 0 ? 0 : U;
+    for (let i = 0; i < U; i++) {
+      const ni = (i + 1) % U;
+      idxs.push(sign > 0 ? `${ring0 + i} ${ring0 + ni} ${base + ni} ${base + i} -1`
+                         : `${ring0 + i} ${base + i} ${base + ni} ${ring0 + ni} -1`);
+    }
+    for (let lat = 1; lat < V - 1; lat++) {
+      const pr = base + (lat - 1) * U, cu = base + lat * U;
+      for (let i = 0; i < U; i++) {
+        const ni = (i + 1) % U;
+        idxs.push(sign > 0 ? `${pr + i} ${pr + ni} ${cu + ni} ${cu + i} -1`
+                           : `${pr + i} ${cu + i} ${cu + ni} ${pr + ni} -1`);
+      }
+    }
+    const last = base + (V - 2) * U;
+    for (let i = 0; i < U; i++) {
+      const ni = (i + 1) % U;
+      idxs.push(sign > 0 ? `${last + i} ${last + ni} ${tip} -1` : `${tip} ${last + ni} ${last + i} -1`);
+    }
+  };
+  addCap(1);
+  addCap(-1);
+  return [pts, idxs];
+}
+
+function crossXml(s, m) {
+  const w = s * 0.36, L = s * 1.8;
+  return '      <Group>\n' +
+    `        <Shape><Box size="${f3(L)} ${f3(w)} ${f3(w)}"/>${m}</Shape>\n` +
+    `        <Shape><Box size="${f3(w)} ${f3(L)} ${f3(w)}"/>${m}</Shape>\n` +
+    `        <Shape><Box size="${f3(w)} ${f3(w)} ${f3(L)}"/>${m}</Shape>\n` +
+    '      </Group>\n';
+}
+
+function buildCrescent(s) {
+  const OR = s, IR = s * 0.6, off = s * 0.32, d = s * 0.22, N = 32;
+  const outer = [], inner = [];
+  for (let i = 0; i < N; i++) {
+    const a = (2 * Math.PI * i) / N;
+    outer.push([OR * Math.cos(a), OR * Math.sin(a)]);
+    inner.push([IR * Math.cos(a) + off, IR * Math.sin(a)]);
+  }
+  const pts = [...outer.map(([x, y]) => [x, y, d]), ...inner.map(([x, y]) => [x, y, d]),
+    ...outer.map(([x, y]) => [x, y, -d]), ...inner.map(([x, y]) => [x, y, -d])];
+  const idxs = [];
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${i} ${N + i} ${N + ni} ${ni} -1`); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${2 * N + i} ${2 * N + ni} ${3 * N + ni} ${3 * N + i} -1`); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${i} ${ni} ${2 * N + ni} ${2 * N + i} -1`); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${N + i} ${3 * N + i} ${3 * N + ni} ${N + ni} -1`); }
+  return [pts, idxs];
+}
+
+function helixPath(s) {
+  const turns = 3, segs = 48, R = s * 0.7, pitch = s * 0.52, path = [];
+  for (let i = 0; i <= turns * segs; i++) {
+    path.push([R * Math.cos((2 * Math.PI * i) / segs), (pitch * i) / segs - (pitch * turns) / 2, R * Math.sin((2 * Math.PI * i) / segs)]);
+  }
+  return path;
+}
+
+function torusKnotPath(s) {
+  const segs = 96, p = 2, q = 3, R = s * 0.65, r = s * 0.24, path = [];
+  for (let i = 0; i < segs; i++) {
+    const t = (2 * Math.PI * i) / segs;
+    path.push([(R + r * Math.cos(q * t)) * Math.cos(p * t), (R + r * Math.cos(q * t)) * Math.sin(p * t), r * Math.sin(q * t)]);
+  }
+  return path;
+}
+
+function buildPlane(s) {
+  const S = s * 2, D = 6, step = (S * 2) / D, pts = [], idxs = [];
+  for (let r = 0; r <= D; r++) for (let c = 0; c <= D; c++) pts.push([-S + c * step, 0, -S + r * step]);
+  for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) {
+    const a = r * (D + 1) + c;
+    idxs.push(`${a} ${a + 1} ${(r + 1) * (D + 1) + c + 1} ${(r + 1) * (D + 1) + c} -1`);
+  }
+  return [pts, idxs];
+}
+
+/** Returns { xml, baseScale } for one shape instance. */
+function buildShape(shape, color, pos, s, rot, transparency, id) {
+  const [r, g, b] = color;
+  const m = mat(r, g, b, transparency);
+  const box = () => { const d = f3(s * 2); return `<Box size="${d} ${d} ${d}"/>`; };
+  let baseScale = [1, 1, 1];
+  let body;
+  switch (shape) {
+    case 'sphere': body = shapeXml(`<Sphere radius="${f3(s)}"/>`, m); break;
+    case 'cone': body = shapeXml(`<Cone bottomRadius="${f3(s)}" height="${f3(s * 2)}"/>`, m); break;
+    case 'cylinder': body = shapeXml(`<Cylinder radius="${f3(s)}" height="${f3(s * 2)}"/>`, m); break;
+    case 'box': body = shapeXml(box(), m); break;
+    case 'ellipsoid': {
+      baseScale = [1.0, 0.65, 1.45];
+      body = shapeXml(`<Sphere radius="${f3(s)}"/>`, m);
+      return { xml: wrap(body, pos, rot, id, ' scale="1.0 0.65 1.45"'), baseScale };
+    }
+    case 'cross': body = crossXml(s, m); break;
+    default: {
+      let pts, idxs, crease = 0;
+      switch (shape) {
+        case 'torus': [pts, idxs] = buildTorus(s); crease = 1.5; break;
+        case 'tetrahedron': [pts, idxs] = buildTetrahedron(s); break;
+        case 'octahedron': [pts, idxs] = buildOctahedron(s); break;
+        case 'icosahedron': [pts, idxs] = buildIcosahedron(s); crease = 0.5; break;
+        case 'dodecahedron': [pts, idxs] = buildDodecahedron(s); break;
+        case 'star': [pts, idxs] = buildStar(s); break;
+        case 'arrow': [pts, idxs] = buildArrow(s); crease = 0.3; break;
+        case 'capsule': [pts, idxs] = buildCapsule(s); crease = 1.5; break;
+        case 'crescent': [pts, idxs] = buildCrescent(s); break;
+        case 'helix': [pts, idxs] = tubeSweep(helixPath(s), s * 0.09, false); crease = 1.5; break;
+        case 'torusknot': [pts, idxs] = tubeSweep(torusKnotPath(s), s * 0.09, true); crease = 1.5; break;
+        case 'plane': [pts, idxs] = buildPlane(s); break;
+        default: body = shapeXml(box(), m);
+      }
+      if (pts) body = shapeXml(ifs(pts, idxs, crease), m);
+    }
+  }
+  return { xml: wrap(body, pos, rot, id), baseScale };
+}
+
+/* ── Animation, lighting, camera ───────────────────────────────────────────── */
+
+function animationXml(type, id, pos, baseScale) {
+  const clock = `    <TimeSensor DEF="clock_${id}" cycleInterval="`;
+  const route = (from, to, field) =>
+    `    <ROUTE fromNode="${from}_${id}" fromField="${from === 'clock' ? 'fraction_changed' : 'value_changed'}" toNode="${to}_${id}" toField="${field}"/>\n`;
+  const [x, y, z] = pos;
+  if (type === 'spin') {
+    return `${clock}3" loop="true"/>\n` +
+      `    <OrientationInterpolator DEF="spin_${id}" key="0 0.5 1" keyValue="0 1 0 0  0 1 0 3.14159  0 1 0 6.28318"/>\n` +
+      route('clock', 'spin', 'set_fraction') + route('spin', 'obj', 'rotation');
+  }
+  if (type === 'bounce') {
+    // Offsets are applied on top of the object's own position so it doesn't jump to the origin.
+    return `${clock}1.5" loop="true"/>\n` +
+      `    <PositionInterpolator DEF="bounce_${id}" key="0 0.5 1" keyValue="${f3(x)} ${f3(y)} ${f3(z)}  ${f3(x)} ${f3(y + 1.5)} ${f3(z)}  ${f3(x)} ${f3(y)} ${f3(z)}"/>\n` +
+      route('clock', 'bounce', 'set_fraction') + route('bounce', 'obj', 'translation');
+  }
+  if (type === 'pulse') {
+    const [a, b, c] = baseScale;
+    const k = (n) => `${f3(a * n)} ${f3(b * n)} ${f3(c * n)}`;
+    return `${clock}2" loop="true"/>\n` +
+      `    <PositionInterpolator DEF="pulse_${id}" key="0 0.5 1" keyValue="${k(1)}  ${k(1.5)}  ${k(1)}"/>\n` +
+      route('clock', 'pulse', 'set_fraction') + route('pulse', 'obj', 'scale');
+  }
+  return '';
+}
+
+const LIGHT_PRESETS = {
+  night:    { sky: [0, 0, 0.05],       lights: [['-0.3 -1 -0.5', 0.3, '0.7 0.7 1.0'], ['0.5 0.5 0', 0.1, '0.9 0.9 1.0']] },
+  day:      { sky: [0.4, 0.6, 0.9],    lights: [['-1 -2 -1', 1.5, '1 1 0.95'], ['1 1 0.5', 0.6, '1 1 1']] },
+  sunrise:  { sky: [0.6, 0.3, 0.1],    lights: [['-1 -0.5 0', 1.2, '1.0 0.6 0.2'], ['0 1 0', 0.4, '1.0 0.8 0.5']] },
+  neon:     { sky: [0, 0, 0],          lights: [['-1 -1 0', 1.0, '1 0 1'], ['1 -1 0', 1.0, '0 1 1'], ['0 1 0', 0.8, '0 1 0']] },
+  brighter: { sky: [0.12, 0.12, 0.18], lights: [['-1 -2 -1', 1.8, '1 1 1'], ['1 1 0.5', 0.9, '0.9 0.9 1']] },
+  dimmer:   { sky: [0.02, 0.02, 0.04], lights: [['-1 -2 -1', 0.4, '1 1 1'], ['1 1 0.5', 0.2, '0.8 0.8 1']] },
+};
+const DEFAULT_LIGHTS = { sky: [0.08, 0.08, 0.12], lights: [['-1 -2 -1', 1.0, '1 1 1'], ['1 1 0.5', 0.5, '0.8 0.8 1']] };
+
+const VIEWPOINTS = {
+  reset:    '<Viewpoint description="Default" position="0 0 10" orientation="0 1 0 0"/>',
+  top:      '<Viewpoint description="Top" position="0 12 0" orientation="1 0 0 -1.5708"/>',
+  front:    '<Viewpoint description="Front" position="0 0 12" orientation="0 1 0 0"/>',
+  side:     '<Viewpoint description="Side" position="12 0 0" orientation="0 1 0 1.5708"/>',
+  iso:      '<Viewpoint description="Iso" position="7 7 7" orientation="0.577 0.577 0.577 -1.5708"/>',
+  zoom_in:  '<Viewpoint description="Close" position="0 0 5" orientation="0 1 0 0"/>',
+  zoom_out: '<Viewpoint description="Wide" position="0 0 20" orientation="0 1 0 0"/>',
+};
+
+const SPOT = '    <SpotLight location="0 5 0" direction="0 -1 0" intensity="1.5" cutOffAngle="0.5" color="1 1 0.9"/>\n';
+
+/* ── Scene model ───────────────────────────────────────────────────────────── */
+
+class Scene {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.sky = [...DEFAULT_LIGHTS.sky];
+    this.lights = DEFAULT_LIGHTS.lights.map((l) => [...l]);
+    this.viewpoint = null;
+    this.spots = 0;
+    this.objects = [];   // { shape, colorName, color, position, size, rotation, transparency, baseScale, xml, anim }
+    this.lightsDirty = false;
+    this.raw = null;     // imported archive scene (X3D XML) that new content is appended to
+  }
+
+  lightsXml() {
+    return this.lights.map(([d, i, c]) => `    <DirectionalLight direction="${d}" intensity="${i.toFixed(2)}" color="${c}"/>\n`).join('');
+  }
+
+  /** Everything we generate, as a fragment that goes inside <Scene>. */
+  contentXml() {
+    let out = '';
+    this.objects.forEach((o, i) => {
+      out += o.xml;
+      if (o.anim) out += animationXml(o.anim, i, o.position, o.baseScale);
+    });
+    out += SPOT.repeat(this.spots);
+    return out;
+  }
+
+  toX3D() {
+    if (this.raw) {
+      const extras = (this.lightsDirty ? this.lightsXml() : '') + (this.viewpoint ? `    ${this.viewpoint}\n` : '') + this.contentXml();
+      return this.raw.includes('</Scene>') ? this.raw.replace('</Scene>', extras + '  </Scene>') : this.raw;
+    }
+    const sky = this.sky.map((n) => n.toFixed(2)).join(' ');
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<X3D profile="Immersive" version="3.3">
+  <Scene>
+    <Background skyColor="${sky}"/>
+    <NavigationInfo type="EXAMINE ANY"/>
+${this.lightsXml()}${this.viewpoint ? `    ${this.viewpoint}\n` : ''}${this.contentXml()}  </Scene>
+</X3D>
+`;
+  }
+
+  snapshot() { return JSON.parse(JSON.stringify(this)); }
+  restore(s) { this.reset(); Object.assign(this, s); }
+}
+
+/* ── Command runner ────────────────────────────────────────────────────────── */
+
+/** Applies a prompt to the scene. Returns { status, message, async? }. */
+function runCommand(scene, text) {
+  const r = parsePrompt(text);
+  const ok = (message) => ({ status: 'success', message });
+  const info = (message) => ({ status: 'ok', message });
+
+  switch (r.action) {
+    case 'help': return info(r.message);
+
+    case 'clear': scene.reset(); return ok('Scene cleared.');
+
+    case 'remove_last': {
+      if (!scene.objects.length) return info('Nothing to remove.');
+      const removed = scene.objects.pop();
+      return ok(`Removed last shape (${removed.shape}).`);
+    }
+
+    case 'inspect': {
+      if (!scene.objects.length) return info('Scene is empty — no objects yet.');
+      const lines = scene.objects.map((o, i) => `${i + 1}. ${o.colorName} ${o.shape} at (${o.position.map((n) => n.toFixed(1)).join(', ')})`);
+      return ok(`${scene.objects.length} object(s):\n` + lines.join('\n'));
+    }
+
+    case 'load_archive': return { status: 'pending', archiveKey: r.key };
+
+    case 'lighting': {
+      const p = LIGHT_PRESETS[r.preset];
+      scene.sky = [...p.sky];
+      scene.lights = p.lights.map((l) => [...l]);
+      scene.lightsDirty = true;
+      return ok(`Lighting set to '${r.preset}'.`);
+    }
+
+    case 'add_light':
+      if (scene.spots >= 3) return info("Already have 3 spotlights — say 'clear' to reset lighting.");
+      scene.spots += 1;
+      return ok('Added spotlight above the scene.');
+
+    case 'camera':
+      scene.viewpoint = VIEWPOINTS[r.view];
+      return ok(`Camera set to ${r.view} view.`);
+
+    case 'animate': {
+      if (r.anim === 'stop') { scene.objects.forEach((o) => { o.anim = null; }); return ok('Animation stopped.'); }
+      if (!scene.objects.length) return info('No objects in scene to animate.');
+      scene.objects[scene.objects.length - 1].anim = r.anim;
+      return ok(`Applied ${r.anim} animation to last object.`);
+    }
+
+    case 'add': {
+      if (r.ambiguous) return info("Not sure what shape you want — try: 'add a red sphere to the left', 'place a gold torus above', or check the Chips tab.");
+      const positions = r.count > 1 ? multiPositions(r.count, r.arrangement, r.position, r.size) : [r.position];
+      const cname = colorName(r.color);
+      positions.forEach((pos) => {
+        const id = scene.objects.length;
+        const { xml, baseScale } = buildShape(r.shape, r.color, pos, r.size, r.rotation, r.transparency, id);
+        scene.objects.push({
+          shape: r.shape, colorName: cname, color: r.color, position: pos, size: r.size,
+          rotation: r.rotation, transparency: r.transparency, baseScale, xml, anim: r.animation,
+        });
+      });
+      return ok(r.message);
+    }
+  }
+  return info("Try: 'place a red sphere to the left'");
+}
+
+return { DATA, Scene, runCommand };
+})();
+
+/* ═══ Kähler surface generators ═══ */
+const Kahler = (() => {
+/* Kähler / Hyperkähler surface generators — a browser port of kahler_viewer.py.
+ * Each builder returns an X3D fragment; buildX3D() centres it at the origin. */
+
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+/** Spectral curvature colour: blue (negative) → green (zero) → orange (positive). */
+function curvatureColor(k, kMin = -2.0, kMax = 2.0) {
+  const t = clamp((k - kMin) / (kMax - kMin), 0, 1);
+  if (t < 0.5) {
+    const s = t * 2;
+    return [0.22 * s, 0.76 * s + 0.22 * (1 - s), 0.97 * (1 - s) + 0.22 * s];
+  }
+  const s = (t - 0.5) * 2;
+  return [0.98 * s + 0.22 * (1 - s), 0.55 * (1 - s) + 0.08 * s, 0.08 * (1 - s)];
+}
+
+const p4 = (p) => `${p[0].toFixed(4)} ${p[1].toFixed(4)} ${p[2].toFixed(4)}`;
+const p3 = (p) => `${p[0].toFixed(3)} ${p[1].toFixed(3)} ${p[2].toFixed(3)}`;
+
+function ifs(pts, idxs, colors, crease = 1.2) {
+  const head = `<IndexedFaceSet coordIndex="${idxs.join(' ')}" ${colors ? 'colorPerVertex="true" ' : ''}solid="false" creaseAngle="${crease}">`;
+  const coord = `<Coordinate point="${pts.map(p4).join(' ')}"/>`;
+  const col = colors ? `<Color color="${colors.map(p3).join(' ')}"/>` : '';
+  return head + coord + col + '</IndexedFaceSet>';
+}
+
+function gridMesh(pts, Nu, Nv, colors) {
+  const idxs = [];
+  for (let i = 0; i < Nu - 1; i++) {
+    for (let j = 0; j < Nv - 1; j++) {
+      const a = i * Nv + j;
+      idxs.push(`${a} ${a + 1} ${(i + 1) * Nv + j + 1} ${(i + 1) * Nv + j} -1`);
+    }
+  }
+  return ifs(pts, idxs, colors);
+}
+
+const surfaceShape = (geo) => `<Shape>${geo}<Appearance><Material transparency="0.05"/></Appearance></Shape>\n`;
+
+const lineShape = (pts, mat) =>
+  `<Shape><IndexedLineSet coordIndex="${pts.map((_, i) => i).join(' ')} -1"><Coordinate point="${pts.map(p3).join(' ')}"/></IndexedLineSet>${mat}</Shape>\n`;
+
+/* ── Kähler ────────────────────────────────────────────────────────────────── */
+
+function fubiniStudy(N = 60, scale = 2.0) {
+  const pts = [], colors = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const u = (i / (N - 1)) * 2 * Math.PI, v = (j / (N - 1)) * Math.PI;
+    pts.push([Math.sin(v) * Math.cos(u) * scale, Math.cos(v) * scale, Math.sin(v) * Math.sin(u) * scale]);
+    colors.push(curvatureColor(1.0, -1.5, 1.5));
+  }
+  return surfaceShape(gridMesh(pts, N, N, colors));
+}
+
+function geodesicGrid(N = 24, R = 2.0, col = [0.22, 0.55, 0.97]) {
+  const mat = `<Appearance><Material emissiveColor="${col.map((c) => c.toFixed(2)).join(' ')}" transparency="0.3"/></Appearance>`;
+  let xml = '';
+  for (let k = 0; k < 12; k++) {
+    const off = (Math.PI * k) / 12, pts = [];
+    for (let i = 0; i <= N; i++) {
+      pts.push([R * Math.cos((2 * Math.PI * i) / N) * Math.sin(off), R * Math.cos(off), R * Math.sin((2 * Math.PI * i) / N) * Math.sin(off)]);
+    }
+    xml += lineShape(pts, mat);
+  }
+  return xml;
+}
+
+const poincareHeight = (r) => (r < 0.999 ? Math.min(-Math.log(Math.max(1e-8, 1 - r * r)) * 0.3, 3.0) : 3.0);
+
+function poincareDisk(N = 55, R = 2.5) {
+  const pts = [], colors = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const r = (0.92 * i) / (N - 1), th = (2 * Math.PI * j) / (N - 1);
+    pts.push([r * Math.cos(th) * R, poincareHeight(r), r * Math.sin(th) * R]);
+    colors.push(curvatureColor(-1.0, -1.5, 1.5));
+  }
+  return surfaceShape(gridMesh(pts, N, N, colors));
+}
+
+function poincareGeodesics(N = 32, R = 2.5) {
+  const mat = '<Appearance><Material emissiveColor="0.22 0.70 0.97" transparency="0.4"/></Appearance>';
+  let xml = '';
+  for (let k = 0; k < 8; k++) {
+    const angle = (Math.PI * k) / 8, pts = [];
+    for (let i = 0; i <= N; i++) {
+      const s = -1 + (2 * i) / N, r = Math.abs(s) * 0.88, th = angle + (s < 0 ? Math.PI : 0);
+      pts.push([r * Math.cos(th) * R, poincareHeight(r), r * Math.sin(th) * R]);
+    }
+    xml += lineShape(pts, mat);
+  }
+  return xml;
+}
+
+function potentialFamily(N = 55, t = 1.0, scale = 2.5) {
+  const pts = [], colors = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const x = -scale + (2 * scale * i) / (N - 1), z = -scale + (2 * scale * j) / (N - 1), r2 = x * x + z * z;
+    let phi, K;
+    if (t !== 0) {
+      phi = Math.log(Math.max(1e-8, 1 + t * r2)) / t;
+      K = t / Math.max(1e-8, (1 + t * r2) ** 2);
+    } else { phi = r2; K = 0; }
+    pts.push([x, clamp(phi * 0.5, -2.0, 3.5), z]);
+    colors.push(curvatureColor(K * 4, -1.5, 1.5));
+  }
+  return surfaceShape(gridMesh(pts, N, N, colors));
+}
+
+/* ── Hyperkähler ───────────────────────────────────────────────────────────── */
+
+function taubNut(c = 1.0, scale = 1.6) {
+  const nShells = 7, nU = 28, nV = 16;
+  let xml = '';
+  for (let k = 0; k < nShells; k++) {
+    const r = 0.3 + 3.5 * (k / (nShells - 1)) ** 1.4;
+    const V = 1.0 + c / Math.max(r, 0.01);
+    const R = (r * Math.sqrt(V) * scale) / 3.5;
+    const transparency = 0.15 + 0.55 * (r / 3.8);
+    const col = curvatureColor(V - 1.0, 0.0, 3.5);
+    const pts = [], colors = [];
+    for (let i = 0; i < nU; i++) for (let j = 0; j < nV; j++) {
+      const th = (Math.PI * j) / (nV - 1), ph = (2 * Math.PI * i) / (nU - 1);
+      pts.push([R * Math.sin(th) * Math.cos(ph), R * Math.cos(th), R * Math.sin(th) * Math.sin(ph)]);
+      colors.push(col);
+    }
+    xml += `<Shape>${gridMesh(pts, nU, nV, colors)}<Appearance><Material transparency="${transparency.toFixed(2)}"/></Appearance></Shape>\n`;
+  }
+  return xml;
+}
+
+function eguchiHanson(N = 52, a = 1.0, scale = 1.5) {
+  const pts = [], colors = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const t = i / (N - 1), r = a + 4.0 * t ** 1.2, ph = (2 * Math.PI * j) / (N - 1);
+    const f2 = Math.max(0, 1 - (a / Math.max(r, 1e-6)) ** 4);
+    const Rb = (r * Math.sqrt(f2) * scale) / 3.0;
+    pts.push([Rb * Math.cos(ph), ((r - a) * scale) / 3.0, Rb * Math.sin(ph)]);
+    const curv = (12 * a ** 4) / Math.max(r ** 6, 1e-6);
+    colors.push(curvatureColor(curv * 2 - 0.5, -0.5, 2.0));
+  }
+  return surfaceShape(gridMesh(pts, N, N, colors));
+}
+
+function cySlice(N = 58, scale = 1.8) {
+  const pts = [], colors = [];
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const r1 = 0.05 + (1.5 * i) / (N - 1), th1 = (2 * Math.PI * j) / (N - 1);
+    const wr = -1 - r1 ** 5 * Math.cos(5 * th1), wi = -(r1 ** 5) * Math.sin(5 * th1);
+    const wm = Math.hypot(wr, wi);
+    if (wm < 1e-9) { pts.push([0, 0, 0]); colors.push([0.2, 0.8, 0.5]); continue; }
+    const r2 = wm ** 0.2, th2 = Math.atan2(wi, wr) / 5.0;
+    pts.push([r2 * Math.cos(th2) * scale, r1 * Math.cos(th1) * scale, r2 * Math.sin(th2) * scale]);
+    colors.push(curvatureColor(1.0 / Math.max(r1 * r2, 0.1) - 2, -1.5, 1.5));
+  }
+  return surfaceShape(gridMesh(pts, N, N, colors));
+}
+
+function hkFlat(N = 32, scale = 2.2) {
+  const planes = [
+    [[1, 0, 0], [0, 1, 0], [0.31, 0.43, 0.97]],
+    [[1, 0, 0], [0, 0, 1], [0.75, 0.25, 0.92]],
+    [[0, 1, 0], [0, 0, 1], [0.20, 0.83, 0.55]],
+  ];
+  const at = (e1, e2, u, v) => [e1[0] * u + e2[0] * v, e1[1] * u + e2[1] * v, e1[2] * u + e2[2] * v];
+  let xml = '';
+  for (const [e1, e2, col] of planes) {
+    const rgb = col.map((c) => c.toFixed(2)).join(' ');
+    const pts = [], idxs = [];
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      pts.push(at(e1, e2, -scale + (2 * scale * i) / (N - 1), -scale + (2 * scale * j) / (N - 1)));
+    }
+    for (let i = 0; i < N - 1; i++) for (let j = 0; j < N - 1; j++) {
+      const a = i * N + j;
+      idxs.push(`${a} ${a + 1} ${(i + 1) * N + j + 1} ${(i + 1) * N + j} -1`);
+    }
+    const geo = `<IndexedFaceSet coordIndex="${idxs.join(' ')}" solid="false" creaseAngle="0"><Coordinate point="${pts.map(p3).join(' ')}"/></IndexedFaceSet>`;
+    xml += `<Shape>${geo}<Appearance><Material diffuseColor="${rgb}" transparency="0.50"/></Appearance></Shape>\n`;
+    const mat = `<Appearance><Material emissiveColor="${rgb}" transparency="0.3"/></Appearance>`;
+    for (let k = 0; k < 9; k++) {
+      const t = -scale + (2 * scale * k) / 8;
+      for (const [ea, eb] of [[e1, e2], [e2, e1]]) {
+        const lo = ea.map((c, n) => c * t + eb[n] * -scale), hi = ea.map((c, n) => c * t + eb[n] * scale);
+        xml += `<Shape><IndexedLineSet coordIndex="0 1 -1"><Coordinate point="${p3(lo)} ${p3(hi)}"/></IndexedLineSet>${mat}</Shape>\n`;
+      }
+    }
+  }
+  return xml;
+}
+
+/* ── Catalogue (labels + the facts shown in the Info tab) ──────────────────── */
+
+const SURFACES = {
+  fubini_study: { label: 'CP¹ — Fubini-Study', category: 'kähler', eq: 'φ = log(1 + |z|²)', curv: 'K = +1', hol: 'U(1)', param: null,
+    desc: 'The complex projective line CP¹ ≅ S² with the Fubini-Study metric. Positive constant holomorphic sectional curvature. Geodesics are great circles.',
+    build: () => fubiniStudy() + geodesicGrid() },
+  poincare: { label: 'Poincaré Disk — H²', category: 'kähler', eq: 'φ = −log(1 − |z|²)', curv: 'K = −1', hol: 'U(1)', param: null,
+    desc: 'The hyperbolic plane with its unique complete Kähler metric. Negative constant curvature. Geodesics are circular arcs perpendicular to the boundary.',
+    build: () => poincareDisk() + poincareGeodesics() },
+  potential_family: { label: 'Kähler Potential Family', category: 'kähler', eq: 'φ_t = t⁻¹ log(1 + t|z|²)', curv: 'K(z) = t·(1+t|z|²)⁻²', hol: 'U(1)',
+    param: 't', paramNote: 't=0: flat ℂ · t=1: Fubini-Study · t≫1: concentrated curvature',
+    desc: 'A one-parameter deformation between flat ℂ (t→0) and CP¹ (t=1). Height encodes the potential; color encodes position-dependent curvature K(z).',
+    build: (p) => potentialFamily(55, p) },
+  taub_nut: { label: 'Taub-NUT Space', category: 'hyperkähler', eq: 'V(r) = 1 + c/r', curv: 'Ric = 0', hol: 'Sp(1)≅SU(2)',
+    param: 'c', paramNote: 'c = NUT charge — larger c = stronger gravitational instanton',
+    desc: 'Complete hyperkähler 4-manifold with NUT charge c. Concentric shells warped by √V(r); inner shells orange (high curvature), outer shells green (V→1).',
+    build: (p) => taubNut(p) },
+  eguchi_hanson: { label: 'Eguchi-Hanson Space', category: 'hyperkähler', eq: 'f² = 1 − (a/r)⁴', curv: 'Ric=0, |Rm|²∝(a/r)⁸', hol: 'Sp(1)',
+    param: 'a', paramNote: 'a = bolt radius — curvature concentrates at the S² bolt at r = a',
+    desc: 'The simplest ALE gravitational instanton — a hyperkähler metric on T*CP¹. Contains a 2-sphere bolt at r=a. Curvature decays as r⁻⁸ away from the bolt.',
+    build: (p) => eguchiHanson(52, p) },
+  cy_quintic: { label: 'Calabi-Yau Quintic (slice)', category: 'hyperkähler', eq: 'Σᵢ zᵢ⁵ = 0 ⊂ CP⁴', curv: 'Ric = 0', hol: 'SU(3)', param: null,
+    desc: 'Real 2-slice of the Fermat quintic — the most-studied compact CY threefold in string theory (h¹¹=1, h²¹=101). Color encodes |Ω|², the holomorphic 3-form.',
+    build: () => cySlice() },
+  hk_flat: { label: 'ℝ⁴ — Flat Hyperkähler', category: 'hyperkähler', eq: 'ωI=dx¹∧dx², ωJ=dx¹∧dx³, ωK=dx²∧dx³', curv: 'K = 0', hol: 'Sp(1)⊂SO(4)', param: null,
+    desc: 'The flat hyperkähler manifold ℝ⁴ ≅ ℍ. Three complex structures I, J, K satisfy IJ=K (quaternion algebra). Each orthogonal plane represents one Kähler form.',
+    build: () => hkFlat() },
+};
+
+/** Mean of every coordinate triple in the fragment, used to centre the surface. */
+function centroid(fragment) {
+  let n = 0, sx = 0, sy = 0, sz = 0;
+  for (const m of fragment.matchAll(/point="([^"]+)"/g)) {
+    const nums = m[1].split(/\s+/).map(Number);
+    for (let i = 0; i + 2 < nums.length; i += 3) {
+      const [x, y, z] = [nums[i], nums[i + 1], nums[i + 2]];
+      if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) { sx += x; sy += y; sz += z; n++; }
+    }
+  }
+  return n ? [sx / n, sy / n, sz / n] : [0, 0, 0];
+}
+
+function buildX3D(id, param = 1.0) {
+  const s = SURFACES[id] || SURFACES.fubini_study;
+  const sky = s.category === 'kähler' ? '0.04 0.05 0.10' : '0.07 0.04 0.12';
+  const geo = s.build(param);
+  const [cx, cy, cz] = centroid(geo);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<X3D profile="Immersive" version="3.3">
+  <Scene>
+    <Background skyColor="${sky}"/>
+    <NavigationInfo type="EXAMINE ANY"/>
+    <DirectionalLight direction="-1 -2 -1" intensity="1.2"/>
+    <DirectionalLight direction="1 1 0.5" intensity="0.5" color="0.8 0.85 1"/>
+    <Viewpoint position="0 0 9" orientation="0 1 0 0"/>
+    <Transform translation="${(-cx).toFixed(3)} ${(-cy).toFixed(3)} ${(-cz).toFixed(3)}">
+${geo}    </Transform>
+  </Scene>
+</X3D>
+`;
+}
+
+return { SURFACES, buildX3D };
+})();
+
+/* ═══ App shell ═══ */
+const $ = (id) => document.getElementById(id);
+const mk = (tag, props = {}, data = {}) => { const e = Object.assign(document.createElement(tag), props); Object.assign(e.dataset, data); return e; };
+const viewer = createViewer($('canvas'));
+const scene = new Agent.Scene();
+const { SURFACES } = Kahler;
+let mode = 'agent';
+
+function tabs(group, onSwitch) {
+  const bar = document.querySelector(`.tabs[data-group="${group}"]`);
+  const prefix = group === 'agent' ? 'a-' : 'k-';
+  const select = (name) => {
+    bar.querySelectorAll('.tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
+    bar.parentElement.querySelectorAll('.pane').forEach((p) => p.classList.toggle('active', p.id === prefix + name));
+    if (onSwitch) onSwitch(name);
+  };
+  bar.addEventListener('click', (e) => { const t = e.target.closest('.tab'); if (t) select(t.dataset.tab); });
+  return select;
+}
+
+function render() {
+  if (mode === 'agent') {
+    writeJSON(STORE_CURRENT, scene.snapshot());
+    viewer.show(scene.toX3D());
+    if (!$('objList').hidden) refreshObjList();
+  } else {
+    viewer.show(Kahler.buildX3D(currentSurface, currentParam));
+  }
+}
+
+function setMode(next, { skipRender = false } = {}) {
+  mode = next;
+  document.body.dataset.mode = next;
+  document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === next)));
+  $('panel-agent').hidden = next !== 'agent';
+  $('panel-kahler').hidden = next !== 'kahler';
+  $('actionsAgent').hidden = next !== 'agent';
+  $('actionsKahler').hidden = next !== 'kahler';
+  if (next !== 'agent') $('objList').hidden = true;
+  else if ($('objToggle').getAttribute('aria-expanded') === 'true') $('objList').hidden = false;
+  history.replaceState(null, '', next === 'agent' ? '#agent' : `#${currentSurface}`);
+  if (!skipRender) render();
+}
+document.querySelector('.modes').addEventListener('click', (e) => {
+  const b = e.target.closest('.mode');
+  if (b && b.dataset.mode !== mode) setMode(b.dataset.mode);
+});
+
+/* ───────── X3D Agent UI ───────── */
+const STORE_CURRENT = 'x3d-studio:current', STORE_SAVES = 'x3d-studio:saves';
+const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '_');
+
+const logEl = $('log'), inp = $('inp'), runBtn = $('runBtn');
+const agentTab = tabs('agent', (n) => { if (n === 'saves') renderSaves(); });
+
+function refreshObjList() {
+  const el = $('objListItems');
+  el.replaceChildren();
+  if (!scene.objects.length) {
+    el.append(Object.assign(document.createElement('em'), { textContent: 'Empty', style: 'color:#666' }));
+    return;
+  }
+  scene.objects.forEach((o, i) => el.append(Object.assign(document.createElement('div'), { className: 'obj-item', textContent: `${i + 1}. ${o.colorName} ${o.shape}` })));
+}
+$('objToggle').addEventListener('click', () => {
+  const open = $('objList').hidden;
+  $('objList').hidden = !open;
+  $('objToggle').setAttribute('aria-expanded', String(open));
+  if (open) refreshObjList();
+});
+
+function addLog(cls, label, text) {
+  const d = document.createElement('div');
+  d.className = 'entry ' + cls;
+  d.append(Object.assign(document.createElement('div'), { className: 'lbl', textContent: label }));
+  String(text).split('\n').forEach((line, i) => { if (i) d.append(document.createElement('br')); d.append(document.createTextNode(line)); });
+  logEl.append(d);
+  agentTab('console');
+  $('a-console').scrollTop = $('a-console').scrollHeight;
+}
+
+async function loadArchive(key) {
+  const url = Agent.DATA.ARCHIVE_EXAMPLES[key];
+  if (!url) return { status: 'error', message: `Unknown archive scene: ${key}` };
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+    const res = await fetch(url, { signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    scene.reset();
+    scene.raw = await res.text();
+    return { status: 'success', message: `Loaded archive scene: ${key}` };
+  } catch (e) {
+    return { status: 'error', message: `Couldn't fetch archive scene "${key}" (${e.message}). The archive must be reachable from your browser and allow cross-origin requests.` };
+  }
+}
+
+async function run(override) {
+  const text = (override ?? inp.value).trim();
+  if (!text) return;
+  addLog('user', 'You', text);
+  inp.value = '';
+  runBtn.disabled = true;
+  try {
+    let r = Agent.runCommand(scene, text);
+    if (r.status === 'pending') r = await loadArchive(r.archiveKey);
+    addLog(r.status === 'success' ? 'ai' : r.status === 'error' ? 'error' : 'info', r.status === 'error' ? 'Error' : 'Scene', r.message);
+    if (r.status === 'success') render();
+  } catch (e) { addLog('error', 'Error', e.message); }
+  finally { runBtn.disabled = false; }
+}
+runBtn.addEventListener('click', () => run());
+$('clearBtn').addEventListener('click', () => { scene.reset(); addLog('sys', 'System', 'Scene cleared.'); render(); });
+inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } });
+document.addEventListener('click', (e) => { const el = e.target.closest('[data-cmd]'); if (el) run(el.dataset.cmd); });
+
+const CHIPS = [
+  ['Shapes', '', [['red sphere', 'place a red sphere to the left'], ['gold torus', 'spawn a huge gold torus in the center'], ['floating cube', 'create a tiny cyan cube floating'], ['purple cone', 'drop a purple cone to the right'], ['icosahedron', 'make a neon green icosahedron'], ['star', 'place a gold star overhead'], ['octahedron', 'spawn a crimson octahedron to the right'], ['helix', 'add a rose gold spiral up high'], ['arrow', 'drop a tilted orange arrow in front'], ['ground plane', 'put a white plane below'], ['capsule', 'add a silver capsule to the left'], ['dodecahedron', 'spawn a jade dodecahedron'], ['cross', 'place a gold cross in the center'], ['crescent', 'add a cyan crescent above'], ['torus knot', 'spawn a neon blue torus knot']]],
+  ['Multi-shape', 'blue', [['5 spheres row', 'add 5 red spheres in a row'], ['8 cubes circle', 'spawn 8 blue cubes in a circle'], ['6 stars grid', 'create 6 gold stars in a grid'], ['4 cones random', 'place 4 cyan cones scattered']]],
+  ['Animation', 'yellow', [['spin last', 'spin'], ['bounce last', 'bounce'], ['pulse last', 'pulse'], ['stop anim', 'stop animation']]],
+  ['Lighting', 'green', [['day', 'day'], ['night', 'night'], ['sunrise', 'sunrise'], ['neon', 'neon lights'], ['brighter', 'brighter'], ['dimmer', 'dimmer'], ['spotlight', 'add spotlight']]],
+  ['Camera', '', [['reset', 'reset camera'], ['top', 'top view'], ['front', 'front view'], ['side', 'side view'], ['iso', 'isometric view']]],
+  ['Archive', 'red', [['hello world', 'load hello'], ['fog', 'load fog'], ['text', 'load text']]],
+  ['Scene', '', [['inspect', 'what is in the scene'], ['undo', 'undo'], ['clear', 'clear']]],
+];
+CHIPS.forEach(([title, tone, items]) => {
+  const g = document.createElement('div');
+  g.className = 'chip-group';
+  g.append(Object.assign(document.createElement('h2'), { className: 'cap', textContent: title }));
+  const row = Object.assign(document.createElement('div'), { className: 'chips' });
+  items.forEach(([label, cmd]) => row.append(mk('button', { className: 'chip ' + tone, textContent: label }, { cmd })));
+  g.append(row);
+  $('chipsPanel').append(g);
+});
+
+function renderSaves() {
+  const names = Object.keys(readJSON(STORE_SAVES, {}));
+  const el = $('savesList');
+  el.replaceChildren();
+  if (!names.length) { el.append(Object.assign(document.createElement('div'), { className: 'note', textContent: 'No saved scenes yet.' })); return; }
+  names.forEach((name) => {
+    const row = Object.assign(document.createElement('div'), { className: 'save-item' });
+    const mk = (t, fn) => { const b = Object.assign(document.createElement('button'), { className: 'save-item-btn', textContent: t }); b.addEventListener('click', fn); return b; };
+    row.append(Object.assign(document.createElement('span'), { className: 'save-item-name', textContent: name }),
+      mk('Load', () => {
+        const s = readJSON(STORE_SAVES, {})[name];
+        if (!s) return addLog('error', 'Load', `No save named '${name}'.`);
+        scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); render();
+      }),
+      mk('Delete', () => { const all = readJSON(STORE_SAVES, {}); delete all[name]; writeJSON(STORE_SAVES, all); renderSaves(); }));
+    el.append(row);
+  });
+}
+function saveScene() {
+  const name = slug($('saveName').value);
+  if (!name) return;
+  const all = readJSON(STORE_SAVES, {});
+  all[name] = scene.snapshot();
+  const ok = writeJSON(STORE_SAVES, all);
+  addLog(ok ? 'ai' : 'error', 'Save', ok ? `Saved as '${name}'.` : "Couldn't save — browser storage is full or blocked.");
+  $('saveName').value = '';
+  renderSaves();
+}
+$('saveBtn').addEventListener('click', saveScene);
+$('saveName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveScene(); });
+$('exportBtn').addEventListener('click', () => downloadText('scene.x3d', scene.toX3D()));
+
+/* ───────── Kähler UI ───────── */
+let currentSurface = 'fubini_study', currentParam = 1.0;
+const kTab = tabs('kahler');
+
+function loadSurface(id, param) {
+  currentSurface = id;
+  currentParam = param != null ? param : 1.0;
+  updateInfo(id);
+  updateActive(id);
+  history.replaceState(null, '', `#${id}`);
+  render();
+}
+function updateInfo(id) {
+  const s = SURFACES[id];
+  $('infoEq').textContent = s.eq; $('infoCurv').textContent = s.curv; $('infoHol').textContent = s.hol; $('infoDesc').textContent = s.desc;
+  const flat = s.curv.includes('Ric = 0') || s.curv === 'K = 0';
+  $('infoCurv').className = 'info-val' + (flat ? ' ricci0' : s.category === 'hyperkähler' ? ' hk' : '');
+  $('paramPane').hidden = !s.param;
+  $('noParam').hidden = !!s.param;
+  if (s.param) { $('paramName').textContent = s.param; if (s.paramNote) $('paramNote').textContent = s.paramNote; }
+  ['kTabInfo', 'kTabParam'].forEach((t) => $(t).classList.toggle('hk', s.category === 'hyperkähler'));
+}
+function updateActive(id) {
+  document.querySelectorAll('.surface-item').forEach((el) => {
+    const on = el.dataset.id === id;
+    el.classList.toggle('active', on);
+    el.classList.toggle('hk', on && SURFACES[id].category === 'hyperkähler');
+    el.setAttribute('aria-current', String(on));
+  });
+}
+
+const filterState = { 'kähler': true, 'hyperkähler': true };
+function applyFilter() {
+  document.querySelectorAll('#surfaceList [data-cat]').forEach((el) => { el.hidden = !filterState[el.dataset.cat]; });
+  $('filterK').setAttribute('aria-pressed', String(filterState['kähler']));
+  $('filterHK').setAttribute('aria-pressed', String(filterState['hyperkähler']));
+}
+function toggleFilter(cat) {
+  if (filterState['kähler'] && filterState['hyperkähler']) { filterState['kähler'] = cat === 'kähler'; filterState['hyperkähler'] = cat === 'hyperkähler'; }
+  else filterState['kähler'] = filterState['hyperkähler'] = true;
+  applyFilter();
+}
+$('filterK').addEventListener('click', () => toggleFilter('kähler'));
+$('filterHK').addEventListener('click', () => toggleFilter('hyperkähler'));
+
+(() => {
+  const list = $('surfaceList');
+  let last = null;
+  for (const [id, s] of Object.entries(SURFACES)) {
+    if (s.category !== last) {
+      last = s.category;
+      list.append(mk('div', { className: 'section-label', textContent: s.category === 'kähler' ? 'Kähler' : 'Hyperkähler' }, { cat: s.category }));
+    }
+    const item = mk('button', { className: 'surface-item' }, { id, cat: s.category });
+    item.append(Object.assign(document.createElement('div'), { className: 'surface-name', textContent: s.label }),
+      Object.assign(document.createElement('div'), { className: 'surface-cat', textContent: `${s.category} · ${s.hol}` }));
+    item.addEventListener('click', () => loadSurface(id, currentParam));
+    list.append(item);
+  }
+})();
+
+const slider = $('paramSlider');
+let debounce;
+slider.addEventListener('input', () => {
+  currentParam = parseFloat(slider.value);
+  $('paramDisplay').textContent = currentParam.toFixed(2);
+  clearTimeout(debounce);
+  debounce = setTimeout(() => { if (SURFACES[currentSurface].param) render(); }, 150);
+});
+
+/* ───────── Boot: #agent (default) or #<surface_id> ───────── */
+const prev = readJSON(STORE_CURRENT, null);
+if (prev) scene.restore(prev);
+const hash = location.hash.slice(1);
+if (SURFACES[hash]) { updateInfo(hash); updateActive(hash); currentSurface = hash; setMode('kahler'); }
+else { updateInfo(currentSurface); updateActive(currentSurface); setMode('agent'); }
+</script>
+</body>
+</html>
