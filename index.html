@@ -191,9 +191,9 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
       <!-- X3D Agent -->
       <div class="mode-panel" id="panel-agent">
         <div class="tabs" role="tablist" data-group="agent">
-          <button class="tab" role="tab" data-tab="console" aria-selected="true">Console</button>
-          <button class="tab" role="tab" data-tab="chips" aria-selected="false">Chips</button>
-          <button class="tab" role="tab" data-tab="saves" aria-selected="false">Saves</button>
+          <button class="tab" role="tab" data-tab="console" aria-selected="true" aria-controls="a-console">Console</button>
+          <button class="tab" role="tab" data-tab="chips" aria-selected="false" aria-controls="a-chips">Chips</button>
+          <button class="tab" role="tab" data-tab="saves" aria-selected="false" aria-controls="a-saves">Saves</button>
         </div>
         <div class="pane active scroll" role="tabpanel" id="a-console"><div class="console-log" id="log" aria-live="polite"><div class="entry sys">Scene ready — type a command or open Chips.</div></div></div>
         <div class="pane scroll" role="tabpanel" id="a-chips"><div class="chips-panel" id="chipsPanel"></div></div>
@@ -212,9 +212,9 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
       <!-- Kähler Viewer -->
       <div class="mode-panel" id="panel-kahler" hidden>
         <div class="tabs" role="tablist" data-group="kahler">
-          <button class="tab" role="tab" data-tab="surfaces" aria-selected="true">Surfaces</button>
-          <button class="tab" role="tab" data-tab="info" aria-selected="false" id="kTabInfo">Info</button>
-          <button class="tab" role="tab" data-tab="param" aria-selected="false" id="kTabParam">Parameter</button>
+          <button class="tab" role="tab" data-tab="surfaces" aria-selected="true" aria-controls="k-surfaces">Surfaces</button>
+          <button class="tab" role="tab" data-tab="info" aria-selected="false" id="kTabInfo" aria-controls="k-info">Info</button>
+          <button class="tab" role="tab" data-tab="param" aria-selected="false" id="kTabParam" aria-controls="k-param">Parameter</button>
         </div>
         <div class="pane active" role="tabpanel" id="k-surfaces">
           <div class="scroll surface-list" id="surfaceList"></div>
