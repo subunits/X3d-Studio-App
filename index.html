@@ -1,10 +1,3 @@
-<!--
-  X3D Studio — X3D Agent + Kähler Viewer in one self-contained file.
-  Copyright 2026 Michael Listrom. Licensed under the Apache License 2.0
-  (https://www.apache.org/licenses/LICENSE-2.0).
-  Third party: X_ite (MIT, https://github.com/create3000/x_ite), loaded from jsDelivr.
-  X3D is an ISO/IEC 19775 open standard.
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,6 +25,43 @@ html, body { height: 100%; background: var(--bg); color: var(--text); overflow: 
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
 button { font-family: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent-l); outline-offset: 2px; }
+
+/* Splash Screen Overlay */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
+}
+#splash.fade-out {
+  opacity: 0;
+  visibility: hidden;
+}
+#splash img {
+  width: min(80vw, 320px);
+  height: min(80vw, 320px);
+  object-fit: contain;
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  animation: pulse-splash 2s infinite ease-in-out;
+}
+#splash .splash-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+@keyframes pulse-splash {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
 
 .shell { display: flex; flex-direction: column; height: 100dvh; padding-top: var(--sat); }
 
@@ -163,6 +193,13 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
 </style>
 </head>
 <body data-mode="agent">
+<!-- Splash Screen / App Initialization Start Screen -->
+<div id="splash">
+  <!-- Replace the base64 string below with your image if needed, or link 'ChatGPT Image Aug 30, 2026 at 11_03_42 PM.png' -->
+  <img src="ChatGPT Image Aug 30, 2026 at 11_03_42 PM.png" alt="X3D Studio Initialization">
+  <div class="splash-title">Initializing X3D Studio...</div>
+</div>
+
 <div class="shell">
   <header>
     <h1>X3D Studio</h1>
@@ -1232,13 +1269,19 @@ function tabs(group, onSwitch) {
   return select;
 }
 
-function render() {
+async function render() {
   if (mode === 'agent') {
     writeJSON(STORE_CURRENT, scene.snapshot());
-    viewer.show(scene.toX3D());
+    await viewer.show(scene.toX3D());
     if (!$('objList').hidden) refreshObjList();
   } else {
-    viewer.show(Kahler.buildX3D(currentSurface, currentParam));
+    await viewer.show(Kahler.buildX3D(currentSurface, currentParam));
+  }
+  // Dismiss splash screen once first render is complete
+  const splash = $('splash');
+  if (splash && !splash.classList.contains('fade-out')) {
+    splash.classList.add('fade-out');
+    setTimeout(() => splash.remove(), 500);
   }
 }
 
@@ -1319,12 +1362,12 @@ async function run(override) {
     let r = Agent.runCommand(scene, text);
     if (r.status === 'pending') r = await loadArchive(r.archiveKey);
     addLog(r.status === 'success' ? 'ai' : r.status === 'error' ? 'error' : 'info', r.status === 'error' ? 'Error' : 'Scene', r.message);
-    if (r.status === 'success') render();
+    if (r.status === 'success') await render();
   } catch (e) { addLog('error', 'Error', e.message); }
   finally { runBtn.disabled = false; }
 }
 runBtn.addEventListener('click', () => run());
-$('clearBtn').addEventListener('click', () => { scene.reset(); addLog('sys', 'System', 'Scene cleared.'); render(); });
+$('clearBtn').addEventListener('click', async () => { scene.reset(); addLog('sys', 'System', 'Scene cleared.'); await render(); });
 inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } });
 document.addEventListener('click', (e) => { const el = e.target.closest('[data-cmd]'); if (el) run(el.dataset.cmd); });
 
@@ -1356,16 +1399,16 @@ function renderSaves() {
     const row = Object.assign(document.createElement('div'), { className: 'save-item' });
     const mk = (t, fn) => { const b = Object.assign(document.createElement('button'), { className: 'save-item-btn', textContent: t }); b.addEventListener('click', fn); return b; };
     row.append(Object.assign(document.createElement('span'), { className: 'save-item-name', textContent: name }),
-      mk('Load', () => {
+      mk('Load', async () => {
         const s = readJSON(STORE_SAVES, {})[name];
         if (!s) return addLog('error', 'Load', `No save named '${name}'.`);
-        scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); render();
+        scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); await render();
       }),
       mk('Delete', () => { const all = readJSON(STORE_SAVES, {}); delete all[name]; writeJSON(STORE_SAVES, all); renderSaves(); }));
     el.append(row);
   });
 }
-function saveScene() {
+async function saveScene() {
   const name = slug($('saveName').value);
   if (!name) return;
   const all = readJSON(STORE_SAVES, {});
@@ -1382,13 +1425,13 @@ $('saveName').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveSc
 let currentSurface = 'fubini_study', currentParam = 1.0;
 const kTab = tabs('kahler');
 
-function loadSurface(id, param) {
+async function loadSurface(id, param) {
   currentSurface = id;
   currentParam = param != null ? param : 1.0;
   updateInfo(id);
   updateActive(id);
   history.replaceState(null, '', `#${id}`);
-  render();
+  await render();
 }
 function updateInfo(id) {
   const s = SURFACES[id];
@@ -1445,7 +1488,7 @@ slider.addEventListener('input', () => {
   currentParam = parseFloat(slider.value);
   $('paramDisplay').textContent = currentParam.toFixed(2);
   clearTimeout(debounce);
-  debounce = setTimeout(() => { if (SURFACES[currentSurface].param) render(); }, 150);
+  debounce = setTimeout(async () => { if (SURFACES[currentSurface].param) await render(); }, 150);
 });
 
 /* ───────── Boot: #agent (default) or #<surface_id> ───────── */
