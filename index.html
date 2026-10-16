@@ -172,6 +172,8 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
     </div>
     <div class="header-actions" id="actionsAgent">
       <button class="hbtn" id="objToggle" aria-expanded="false">&#9776; Objects</button>
+      <button class="hbtn" data-cmd="undo">&#8630; Undo</button>
+      <button class="hbtn" data-cmd="redo">&#8631; Redo</button>
       <button class="hbtn" data-cmd="reset camera">&#8635; View</button>
       <button class="hbtn" id="exportBtn">Export .x3d</button>
     </div>
@@ -203,7 +205,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
           <p class="note">Saved scenes live in this browser. Use Export .x3d to keep a copy as a file.</p>
         </div></div>
         <div class="input-area">
-          <textarea id="inp" rows="2" aria-label="Command" placeholder="spawn a ruby donut… add 5 spheres in a row… night… spin…"></textarea>
+          <textarea id="inp" rows="2" aria-label="Command" placeholder="add a shiny gold gear… 8 cubes in a spiral… make it bigger… sunset sky… undo"></textarea>
           <div class="btn-row"><button id="runBtn">&#9654; Run</button><button id="clearBtn">&#10005; Clear</button></div>
           <div class="hint">Enter to run &bull; Drag to orbit &bull; Scroll to zoom</div>
         </div>
@@ -254,15 +256,26 @@ function createViewer(canvas) {
     X3D(() => { browser = X3D.getBrowser(canvas); resolve(browser); });
   });
 
-  let queue = Promise.resolve();
+  // Loads are serialised, and while one is in flight only the newest request is kept,
+  // so rapid commands or a slider drag never build up a backlog of stale scenes.
+  let pending = null, pump = null;
   function show(xml) {
-    // Serialise loads so a fast slider drag can't interleave two replaceWorld calls.
-    queue = queue.then(async () => {
-      const b = await ready;
-      const scene = await b.createX3DFromString(xml);
-      await b.replaceWorld(scene);
-    }).catch((err) => console.error('X3D load failed:', err));
-    return queue;
+    pending = xml;
+    if (!pump) {
+      pump = (async () => {
+        while (pending !== null) {
+          const next = pending;
+          pending = null;
+          try {
+            const b = await ready;
+            const scene = await b.createX3DFromString(next);
+            await b.replaceWorld(scene);
+          } catch (err) { console.error('X3D load failed:', err); }
+        }
+        pump = null;
+      })();
+    }
+    return pump || Promise.resolve();
   }
 
   return { show, ready };
@@ -280,7 +293,6 @@ function downloadText(filename, text, type = 'model/x3d+xml') {
 
 /* ═══ X3D Agent engine (parser, shapes, scene model) ═══ */
 const Agent = (() => {
-/* Generated from app.py: vocabulary tables for the rule-based parser. */
 const DATA = {
  "COLORS": {"red": [1.0, 0.0, 0.0], "green": [0.0, 0.8, 0.0], "blue": [0.0, 0.4, 1.0], "yellow": [1.0, 1.0, 0.0], "orange": [1.0, 0.5, 0.0], "purple": [0.5, 0.0, 0.8], "pink": [1.0, 0.4, 0.7], "magenta": [1.0, 0.0, 1.0], "cyan": [0.0, 1.0, 1.0], "teal": [0.0, 0.5, 0.5], "white": [1.0, 1.0, 1.0], "black": [0.05, 0.05, 0.05], "gray": [0.5, 0.5, 0.5], "grey": [0.5, 0.5, 0.5], "brown": [0.5, 0.25, 0.1], "gold": [1.0, 0.84, 0.0], "silver": [0.75, 0.75, 0.75], "lime": [0.2, 1.0, 0.0], "indigo": [0.29, 0.0, 0.51], "turquoise": [0.25, 0.88, 0.82], "crimson": [0.86, 0.08, 0.24], "coral": [1.0, 0.5, 0.31], "salmon": [0.98, 0.5, 0.45], "navy": [0.0, 0.0, 0.5], "maroon": [0.5, 0.0, 0.0], "olive": [0.5, 0.5, 0.0], "tan": [0.82, 0.71, 0.55], "beige": [0.96, 0.96, 0.86], "ivory": [1.0, 1.0, 0.94], "ruby": [0.88, 0.07, 0.37], "emerald": [0.31, 0.78, 0.47], "sapphire": [0.06, 0.32, 0.73], "amber": [1.0, 0.75, 0.0], "bronze": [0.8, 0.5, 0.2], "copper": [0.72, 0.45, 0.2], "neon": [0.22, 1.0, 0.08], "electric": [0.0, 0.6, 1.0], "hot": [1.0, 0.07, 0.57], "dark": [0.15, 0.15, 0.15], "light": [0.85, 0.85, 0.85], "lavender": [0.71, 0.49, 0.86], "mint": [0.6, 1.0, 0.8], "peach": [1.0, 0.8, 0.64], "rose": [1.0, 0.3, 0.5], "lilac": [0.78, 0.64, 0.78], "chartreuse": [0.5, 1.0, 0.0], "aqua": [0.0, 1.0, 1.0], "sand": [0.76, 0.7, 0.5], "rust": [0.72, 0.25, 0.05], "scarlet": [1.0, 0.14, 0.0], "violet": [0.56, 0.0, 1.0], "plum": [0.56, 0.27, 0.52], "slate": [0.44, 0.5, 0.56], "cream": [1.0, 0.99, 0.82], "jade": [0.0, 0.66, 0.42], "cobalt": [0.0, 0.28, 0.67], "magma": [0.9, 0.2, 0.0], "ice": [0.8, 0.95, 1.0], "lemon": [1.0, 0.97, 0.0], "golden": [1.0, 0.84, 0.0], "wine": [0.45, 0.0, 0.13], "transparent": [0.5, 0.5, 0.5]},
  "TWO_WORD_COLORS": {"hot pink": [1.0, 0.07, 0.57], "dark red": [0.55, 0.0, 0.0], "dark blue": [0.0, 0.0, 0.55], "dark green": [0.0, 0.39, 0.0], "dark purple": [0.25, 0.0, 0.4], "dark gray": [0.2, 0.2, 0.2], "light blue": [0.53, 0.81, 0.98], "light green": [0.56, 0.93, 0.56], "light pink": [1.0, 0.71, 0.76], "light gray": [0.83, 0.83, 0.83], "neon green": [0.22, 1.0, 0.08], "neon pink": [1.0, 0.08, 0.58], "neon yellow": [1.0, 1.0, 0.0], "neon orange": [1.0, 0.45, 0.0], "neon blue": [0.1, 0.4, 1.0], "electric blue": [0.0, 0.6, 1.0], "electric green": [0.0, 1.0, 0.2], "deep purple": [0.29, 0.0, 0.51], "deep blue": [0.0, 0.0, 0.7], "deep red": [0.6, 0.0, 0.0], "bright orange": [1.0, 0.65, 0.0], "bright yellow": [1.0, 1.0, 0.2], "bright green": [0.0, 1.0, 0.2], "sky blue": [0.53, 0.81, 0.98], "forest green": [0.13, 0.55, 0.13], "lime green": [0.2, 1.0, 0.0], "baby blue": [0.54, 0.81, 0.94], "baby pink": [1.0, 0.85, 0.88], "ocean blue": [0.0, 0.47, 0.75], "fire red": [1.0, 0.15, 0.0], "fire orange": [1.0, 0.4, 0.0], "ice blue": [0.8, 0.95, 1.0], "rose gold": [0.91, 0.67, 0.62], "blood red": [0.65, 0.0, 0.0], "mint green": [0.6, 1.0, 0.8], "sand brown": [0.76, 0.7, 0.5], "pale blue": [0.69, 0.87, 0.9], "pale pink": [0.98, 0.85, 0.87]},
@@ -310,18 +322,26 @@ const DATA = {
  "ANIM_PULSE": ["pulse", "pulsing", "breathe", "breathing", "throb", "grow and shrink"],
  "ANIM_STOP": ["stop", "freeze", "stop animation", "stop spinning", "stop bouncing", "no animation"]
 };
-
-/* X3D Agent engine — a browser port of app.py.
- * Parses a natural-language prompt, mutates an in-memory scene model,
- * and serialises that model to an X3D XML string. No server involved. */
+/* X3D Agent engine — parser, geometry, materials, animation, environment, scene model. */
 
 const mod = (n, m) => ((n % m) + m) % m;
-const f3 = (n) => n.toFixed(3);
+const f3 = (n) => (Math.abs(n) < 5e-4 ? 0 : n).toFixed(3);
 const has = (t, phrases) => phrases.some((p) => t.includes(p));
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordRe = (w) => new RegExp('\\b' + esc(w) + '\\b');
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const hexRgb = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+const rgbHex = (c) => c.map((v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+const lum = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+const fmtPos = (p) => `(${p.map((n) => n.toFixed(1)).join(', ')})`;
+const num = (s) => parseFloat(s);
 
-// Python's random.seed(42) isn't available in JS; a seeded PRNG keeps "scattered" layouts stable.
+function hsv(h, s, v) {
+  const i = Math.floor(h * 6) % 6, f = h * 6 - Math.floor(h * 6), p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
+}
+
 function mulberry32(seed) {
   return () => {
     seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
@@ -331,59 +351,132 @@ function mulberry32(seed) {
   };
 }
 
-/* ── Parsers ───────────────────────────────────────────────────────────────── */
+/* ── Vocabulary extensions ─────────────────────────────────────────────────── */
 
-const TWO_WORD_RE = /(hot|dark|light|neon|electric|deep|bright|pale|sky|forest|lime|baby|ocean|fire|ice|rose|blood|mint|sand)\s+(red|green|blue|pink|orange|purple|yellow|cyan|gray|grey|brown|white|black|gold)/;
-const COORD_RE = /(?:at|position|pos|translate|move to|place at|put at)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/;
-const DEFAULT_COLOR = [0.4, 0.6, 1.0];
+(() => {
+  const css = 'aliceblue f0f8ff antiquewhite faebd7 aquamarine 7fffd4 azure f0ffff bisque ffe4c4 blanchedalmond ffebcd blueviolet 8a2be2 burlywood deb887 cadetblue 5f9ea0 chocolate d2691e cornflowerblue 6495ed cornsilk fff8dc darkcyan 008b8b darkgoldenrod b8860b darkkhaki bdb76b darkmagenta 8b008b darkolivegreen 556b2f darkorange ff8c00 darkorchid 9932cc darksalmon e9967a darkseagreen 8fbc8f darkslateblue 483d8b darkslategray 2f4f4f darkturquoise 00ced1 darkviolet 9400d3 deeppink ff1493 deepskyblue 00bfff dimgray 696969 dodgerblue 1e90ff firebrick b22222 forestgreen 228b22 fuchsia ff00ff gainsboro dcdcdc ghostwhite f8f8ff goldenrod daa520 greenyellow adff2f honeydew f0fff0 hotpink ff69b4 indianred cd5c5c khaki f0e68c lavenderblush fff0f5 lawngreen 7cfc00 lemonchiffon fffacd lightblue add8e6 lightcoral f08080 lightcyan e0ffff lightgreen 90ee90 lightpink ffb6c1 lightsalmon ffa07a lightseagreen 20b2aa lightskyblue 87cefa lightslategray 778899 lightsteelblue b0c4de lightyellow ffffe0 limegreen 32cd32 linen faf0e6 mediumaquamarine 66cdaa mediumblue 0000cd mediumorchid ba55d3 mediumpurple 9370db mediumseagreen 3cb371 mediumslateblue 7b68ee mediumspringgreen 00fa9a mediumturquoise 48d1cc mediumvioletred c71585 midnightblue 191970 mintcream f5fffa mistyrose ffe4e1 moccasin ffe4b5 oldlace fdf5e6 olivedrab 6b8e23 orangered ff4500 orchid da70d6 palegoldenrod eee8aa palegreen 98fb98 paleturquoise afeeee palevioletred db7093 papayawhip ffefd5 peachpuff ffdab9 powderblue b0e0e6 rosybrown bc8f8f royalblue 4169e1 saddlebrown 8b4513 sandybrown f4a460 seagreen 2e8b57 seashell fff5ee sienna a0522d skyblue 87ceeb slateblue 6a5acd snow fffafa springgreen 00ff7f steelblue 4682b4 thistle d8bfd8 tomato ff6347 wheat f5deb3 whitesmoke f5f5f5 yellowgreen 9acd32 ' +
+    'charcoal 333333 graphite 3a3a3a mustard e1ad01 burgundy 800020 terracotta e2725b periwinkle ccccff mauve e0b0ff cerulean 007ba7 vermilion e34234 sage 9caf88 taupe 483c32 ochre cc7722 umber 635147 obsidian 0b1215 pearl eae0c8 platinum e5e4e2 chrome c8ccd0 steel 71797e denim 1560bd mahogany c04000 tangerine f28500 apricot fbceb1 blush de5d83 grass 4c9a2a lagoon 1fa7a0 mulberry c54b8c raspberry e30b5c blueberry 4f86f7 cherry de3163 chestnut 954535 espresso 4b3621 forest 228b22 pumpkin ff7518 butter fff9a0 canary ffff99 flamingo fc8eac seafoam 93e9be moss 8a9a5b';
+  const parts = css.split(' ');
+  for (let i = 0; i < parts.length; i += 2) if (!(parts[i] in DATA.COLORS)) DATA.COLORS[parts[i]] = hexRgb(parts[i + 1]);
 
-function parseColor(t) {
-  const two = t.match(TWO_WORD_RE);
-  if (two) {
-    return DATA.TWO_WORD_COLORS[two[1] + ' ' + two[2]] || DATA.COLORS[two[2]] || DEFAULT_COLOR;
+  const SA = DATA.SHAPE_ALIASES;
+  ['floor', 'ground', 'disc', 'disk', 'diamond', 'gem', 'crystal', 'prism', 'pyramid', 'pyramids', 'diamonds', 'discs', 'disks'].forEach((k) => delete SA[k]);
+  const add = (shape, words) => words.split(',').forEach((w) => { SA[w.trim()] = shape; });
+  add('pyramid', 'pyramid,pyramids,tetrapod');
+  add('prism', 'prism,triangular prism,prisms');
+  add('wedge', 'wedge,ramp,slope,doorstop');
+  add('disc', 'disc,disk,coin,plate,puck,saucer,discs,disks,coins,plates');
+  add('washer', 'washer,annulus,flat ring,washers');
+  add('tube', 'hollow cylinder,hollow tube,hollow pipe,sleeve');
+  add('dome', 'dome,hemisphere,igloo,domes');
+  add('bowl', 'bowl,cup,basin,bowls');
+  add('gem', 'gem,diamond,jewel,brilliant,gems,diamonds,jewels');
+  add('crystal', 'crystal,quartz,crystals');
+  add('heart', 'heart,valentine,hearts');
+  add('gear', 'gear,cog,cogwheel,sprocket,gears,cogs');
+  add('tree', 'tree,pine,conifer,fir,evergreen,trees');
+  add('house', 'house,cottage,home,cabin,hut,houses');
+  add('tower', 'tower,turret,lighthouse,castle tower,towers');
+  add('rocket', 'rocket,missile,spaceship,rockets');
+  add('vase', 'vase,urn,vessel,amphora,vases');
+  add('mushroom', 'mushroom,toadstool,mushrooms');
+  add('snowman', 'snowman,snowmen');
+  add('table', 'table,desk,tables');
+  add('chair', 'chair,stool,seat,chairs');
+  add('stairs', 'stairs,staircase,steps,stairway');
+  add('arch', 'arch,archway,gateway,doorway,arches');
+  add('mobius', 'mobius,möbius,moebius,mobius strip,möbius strip,mobius band');
+  add('klein', 'klein bottle,klein,klein surface');
+  add('saddle', 'saddle,hyperbolic paraboloid,pringle,saddle surface');
+  add('catenoid', 'catenoid,soap film,minimal surface');
+  add('helicoid', 'helicoid,spiral ramp,spiral staircase');
+  add('pseudosphere', 'pseudosphere,trumpet,horn,bugle');
+  add('ripple', 'ripple,wave surface,ripples,water ripple');
+  add('terrain', 'terrain,hills,landscape,heightmap,dunes');
+  add('shell', 'shell,seashell,conch,snail');
+  add('torusknot', 'trefoil,trefoil knot,trefoils');
+  add('cinquefoil', 'cinquefoil,cinquefoil knot,pentafoil');
+  add('tesseract', 'tesseract,hypercube,4d cube,tesseracts');
+  add('text', 'text,label,sign,caption,banner,lettering,words,title');
+  delete SA.spiral; delete SA.spirals; // re-added below with the other helix aliases
+  add('helix', 'helix,spiral,coil,spring,screw,helices,spirals,coils');
+})();
+
+const MOD_KEYS = ['neon', 'electric', 'hot', 'dark', 'light', 'transparent'];
+const MODS = 'dark|light|pale|pastel|bright|deep|neon|vivid|muted|soft|rich|burnt|electric|hot|dim|faded|bold';
+
+function applyMod(m, c) {
+  switch (m) {
+    case 'dark': case 'deep': case 'rich': case 'burnt': return mix(c, [0, 0, 0], 0.45);
+    case 'dim': case 'faded': return mix(c, [0.35, 0.35, 0.35], 0.45);
+    case 'light': case 'soft': return mix(c, [1, 1, 1], 0.45);
+    case 'pale': case 'pastel': return mix(c, [1, 1, 1], 0.62);
+    case 'muted': return mix(c, [0.5, 0.5, 0.5], 0.5);
+    default: { // bright / vivid / neon / electric / hot / bold: push saturation and value
+      const mx = Math.max(...c), mn = Math.min(...c), span = mx - mn || 1;
+      return c.map((v) => clamp((v - mn) / span * 1.0 + (v === mx ? 0 : 0.0), 0, 1) * 0.92 + 0.08 * (v === mx ? 1 : 0));
+    }
   }
-  const hex = t.match(/#([0-9a-f]{6}|[0-9a-f]{3})\b/);
-  if (hex) {
-    let h = hex[1];
-    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
-  }
-  const rgb = t.match(/(?:rgb|color)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
-  if (rgb) {
-    let v = [1, 2, 3].map((i) => parseFloat(rgb[i]));
-    if (Math.max(...v) > 1) v = v.map((x) => x / 255);
-    return v.map((x) => Math.min(1, Math.max(0, x)));
-  }
-  for (const [name, c] of Object.entries(DATA.COLORS)) {
-    if (wordRe(name).test(t)) return c;
-  }
-  return DEFAULT_COLOR;
 }
 
-function parseSize(t) {
-  const m = t.match(/(?:size|radius|scale|width|height|length)\s+([\d.]+)/);
-  if (m) return Math.max(0.05, Math.min(parseFloat(m[1]), 5.0));
-  for (const [word, s] of Object.entries(DATA.SIZES)) {
-    if (wordRe(word).test(t)) return s;
+const COLOR_NAMES = [...new Set([...Object.keys(DATA.COLORS).filter((k) => !MOD_KEYS.includes(k)), ...Object.keys(DATA.TWO_WORD_COLORS)])]
+  .sort((a, b) => b.length - a.length);
+const COLOR_RE_SRC = String.raw`(#[0-9a-f]{6}\b|#[0-9a-f]{3}\b)|\b(?:rgb|color|colour)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)|(?:\b(${MODS})\s+)?\b(${COLOR_NAMES.map(esc).join('|')})\b`;
+
+/** Every colour mention in the text, in order: [{ i, j, rgb, name }]. */
+function findColors(t) {
+  const re = new RegExp(COLOR_RE_SRC, 'g');
+  const out = [];
+  for (const m of t.matchAll(re)) {
+    let rgb, name = m[0].trim();
+    if (m[1]) {
+      let h = m[1].slice(1);
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      rgb = hexRgb(h); name = '#' + h;
+    } else if (m[2]) {
+      let v = [m[2], m[3], m[4]].map(num);
+      if (Math.max(...v) > 1) v = v.map((x) => x / 255);
+      rgb = v.map((x) => clamp(x, 0, 1)); name = 'custom';
+    } else if (DATA.TWO_WORD_COLORS[name]) rgb = DATA.TWO_WORD_COLORS[name];
+    else if (DATA.COLORS[name]) rgb = DATA.COLORS[name];
+    else rgb = applyMod(m[5], DATA.COLORS[m[6]]);
+    out.push({ i: m.index, j: m.index + m[0].length, rgb: [...rgb], name });
   }
+  return out;
+}
+
+const DEFAULT_COLOR = [0.4, 0.6, 1.0];
+function parseColorInfo(t, spans = findColors(t)) {
+  if (spans.length) return { rgb: spans[0].rgb, name: spans[0].name, spans };
+  const m = t.match(/\b(neon|electric|hot|dark|light)\b/);
+  if (m) return { rgb: [...DATA.COLORS[m[1]]], name: m[1], spans };
+  return { rgb: [...DEFAULT_COLOR], name: 'blue', spans, defaulted: true };
+}
+
+/* ── Plain parsers ─────────────────────────────────────────────────────────── */
+
+const COORD_RE = /(?:\b(?:at|position|pos|translate|move to|to|place at|put at)\s+|\()\s*(-?[\d.]+)\s*[, ]\s*(-?[\d.]+)\s*[, ]\s*(-?[\d.]+)/;
+
+function parseSize(t) {
+  const m = t.match(/(?:size|radius|scale|width|height|length)\s+(?:of\s+|to\s+|=\s*)?([\d.]+)/);
+  if (m) return clamp(num(m[1]), 0.05, 5.0);
+  for (const [word, s] of Object.entries(DATA.SIZES)) if (wordRe(word).test(t)) return s;
   return 0.8;
 }
 
 function parsePosition(t) {
   const c = t.match(COORD_RE);
-  if (c) return [parseFloat(c[1]), parseFloat(c[2]), parseFloat(c[3])];
+  if (c) return [num(c[1]), num(c[2]), num(c[3])];
   const phrases = Object.entries(DATA.POSITIONS).sort((a, b) => b[0].length - a[0].length);
-  for (const [phrase, pos] of phrases) if (t.includes(phrase)) return pos;
+  for (const [phrase, pos] of phrases) if (wordRe(phrase).test(t)) return [...pos];
   return [0, 0, 0];
 }
 
 function parseRotation(t) {
-  const m = t.match(/rotat\w*\s+([-\d.]+)\s*(?:degrees?|deg)?\s*(?:around|along|on)?\s*(x|y|z)?/);
-  if (m) {
-    const rad = (parseFloat(m[1]) * Math.PI) / 180;
-    const axis = m[2] || 'y';
-    const ax = axis === 'x' ? [1, 0, 0] : axis === 'z' ? [0, 0, 1] : [0, 1, 0];
-    return [...ax, rad];
+  const m = t.match(/(-?[\d.]+)\s*(?:degrees?|deg|°)(?:\s*(?:around|along|on|about)\s*(?:the\s+)?(?:axis\s+)?(x|y|z)\b)?/) || t.match(/rotat\w*\s+(?:by\s+|to\s+)?(-?[\d.]+)\s*(?:\s*(?:around|along|on|about)\s*(?:the\s+)?(x|y|z)\b)?/);
+  if (m && !isNaN(num(m[1])) && /rotat|turn|tilt|angle|twist|spin|lean|flip/.test(t)) {
+    const rad = (num(m[1]) * Math.PI) / 180, axis = m[2] || (/\b(around|about|on)\s+(?:the\s+)?(x|y|z)\b/.exec(t) || [])[2] || 'y';
+    return [...(axis === 'x' ? [1, 0, 0] : axis === 'z' ? [0, 0, 1] : [0, 1, 0]), rad];
   }
   if (/\b(tilt|tilted|lean|leaning|sideways|on its side|on its back)\b/.test(t)) return [0, 0, 1, Math.PI / 2];
   if (/\b(upside down|inverted|flipped)\b/.test(t)) return [0, 0, 1, Math.PI];
@@ -391,170 +484,193 @@ function parseRotation(t) {
   return null;
 }
 
-function parseCount(t, stripCoords = '') {
-  const s = stripCoords ? t.replace(stripCoords, '') : t;
-  const m = s.match(/\b(\d+)\b/);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    if (n >= 2 && n <= 20) return n;
-  }
-  const words = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-  for (const [w, n] of Object.entries(words)) if (wordRe(w).test(t)) return n;
+const NUM_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, dozen: 12, fifteen: 15, twenty: 20, thirty: 30, fifty: 50, couple: 2, few: 3, several: 5 };
+const MAX_COUNT = 60;
+
+function parseCount(t) {
+  const s = t
+    .replace(COORD_RE, ' ')
+    .replace(/(?:size|radius|scale|width|height|length|rotate|rotating|by|move|shift|object|number|#)\s*[-\d.]+/g, ' ')
+    .replace(/[-\d.]+\s*(?:degrees?|deg|units?|times|seconds?|x\b|%|st\b|nd\b|rd\b|th\b)/g, ' ');
+  const m = s.match(/(?<![\d.])(\d+)(?![\d.])/);
+  if (m) { const n = parseInt(m[1], 10); if (n >= 2 && n <= MAX_COUNT) return n; if (n > MAX_COUNT) return MAX_COUNT; }
+  for (const [w, n] of Object.entries(NUM_WORDS)) if (wordRe(w).test(s)) return n;
   return 1;
 }
 
-function parseArrangement(t) {
-  if (/\b(in a row|row|line|lined up|horizontal)\b/.test(t)) return 'row';
-  if (/\b(in a circle|circle|ring|circular|around)\b/.test(t)) return 'circle';
-  if (/\b(grid|matrix|formation)\b/.test(t)) return 'grid';
-  if (/\b(random|scattered|spread|everywhere)\b/.test(t)) return 'random';
-  return 'row';
+/* ── Materials, textures, styles ───────────────────────────────────────────── */
+
+const FINISH_WORDS = [
+  ['metal', /\b(metal|metallic|chrome|brushed|steely|mirror|mirrored|mirror-like)\b/],
+  ['gloss', /\b(shiny|glossy|polished|lacquered|lustrous|wet|gleaming)\b/],
+  ['matte', /\b(matte|matt|dull|rough|chalky|unpolished|clay|satin)\b/],
+  ['glow', /\b(glow|glows|glowing|luminous|emissive|radiant|illuminated|lit up|self-lit|fluorescent)\b/],
+];
+const TEXTURE_WORDS = [
+  ['checker', /\b(checker|checkered|chequered|checkerboard|chessboard|chess)\b/],
+  ['stripes', /\b(stripe|striped|stripes|banded|zebra|candy cane)\b/],
+  ['dots', /\b(dot|dots|dotted|polka|polka-dot|spotted|spots)\b/],
+  ['grid', /\b(gridded|grid pattern|grid texture|plaid|tartan|waffle)\b/],
+  ['noise', /\b(speckled|noisy|grainy|marbled|granite|stone|rocky|textured|camo|camouflage)\b/],
+  ['rainbow', /\b(rainbow|multicolou?r(?:ed)?|prismatic|spectrum|iridescent)\b/],
+  ['gradient', /\b(gradient|ombre|fade from|fading from|blend from)\b/],
+];
+
+/** Pulls any material/finish/texture words out of a prompt. Returns only what was mentioned. */
+function parseStyle(t, spans) {
+  const s = {};
+  for (const [k, re] of FINISH_WORDS) if (re.test(t)) { s.finish = k; break; }
+  for (const [k, re] of TEXTURE_WORDS) if (re.test(t)) { s.texture = k; break; }
+  if (/\b(plain|untextured|no texture|no pattern|smooth colou?r)\b/.test(t)) s.texture = null;
+  if (/\b(wireframe|wire frame|wire-frame|wires|mesh|lattice|outline|skeleton|skeletal)\b/.test(t)) s.wire = true;
+  else if (/\b(solid|filled|fill in|opaque)\b/.test(t) && !/solid (gold|silver|metal|steel)/.test(t)) { s.wire = false; if (/\bopaque\b/.test(t)) s.transparency = 0; }
+  const semi = t.match(/\b(slightly|a bit|somewhat|semi|half|mostly|very|fully|barely)[- ]?(transparent|translucent|see[- ]through|clear)\b/);
+  if (semi) s.transparency = { slightly: 0.25, 'a bit': 0.3, barely: 0.2, somewhat: 0.45, semi: 0.5, half: 0.5, mostly: 0.75, very: 0.85, fully: 0.95 }[semi[1]];
+  else if (/\b(transparent|translucent|see through|see-through|glass|glassy|ghost|ghostly|crystal clear|invisible)\b/.test(t)) s.transparency = 0.6;
+  if (s.texture === 'gradient' || s.texture === 'checker' || s.texture === 'stripes' || s.texture === 'dots' || s.texture === 'grid') {
+    if (spans && spans.length >= 2) s.color2 = spans[1].rgb;
+  }
+  if (/\bzebra\b/.test(t)) { s.color2 = [1, 1, 1]; s.forceColor = [0.05, 0.05, 0.05]; }
+  if (/\bcandy cane\b/.test(t)) { s.color2 = [1, 1, 1]; s.forceColor = [0.9, 0.05, 0.1]; }
+  const scale = t.match(/\b(?:texture|pattern)\s+scale\s+([\d.]+)|\b(finer|smaller pattern|tiny pattern|bigger pattern|larger pattern|coarse|coarser)\b/);
+  if (scale) s.texScale = scale[1] ? num(scale[1]) : /finer|smaller|tiny/.test(scale[2]) ? 4 : 1;
+  return s;
 }
 
-function parseAnimation(t) {
-  if (has(t, DATA.ANIM_STOP)) return 'stop';
-  if (has(t, DATA.ANIM_SPIN)) return 'spin';
-  if (has(t, DATA.ANIM_BOUNCE)) return 'bounce';
-  if (has(t, DATA.ANIM_PULSE)) return 'pulse';
-  return null;
+const hexPx = (c) => '0x' + rgbHex(c);
+
+function textureXml(tex, c1, c2, scale) {
+  const lo = lum(c1);
+  const b = c2 || (lo < 0.55 ? mix(c1, [1, 1, 1], 0.85) : mix(c1, [0, 0, 0], 0.85));
+  let w = 16, h = 16, px = [];
+  const rnd = mulberry32(7);
+  switch (tex) {
+    case 'checker': for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px.push(((x >> 2) + (y >> 2)) % 2 ? b : c1); break;
+    case 'stripes': for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px.push((x >> 2) % 2 ? b : c1); break;
+    case 'dots': for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px.push(Math.hypot((x % 8) - 3.5, (y % 8) - 3.5) < 2.6 ? b : c1); break;
+    case 'grid': for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px.push(x % 8 < 1 || y % 8 < 1 ? b : c1); break;
+    case 'noise': for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px.push(c1.map((v) => clamp(v * (0.55 + 0.6 * rnd()), 0, 1))); break;
+    case 'gradient': w = 1; h = 64; for (let y = 0; y < h; y++) px.push(mix(c1, b, y / (h - 1))); break;
+    case 'rainbow': w = 1; h = 96; for (let y = 0; y < h; y++) px.push(hsv((y / (h - 1)) * 0.83, 0.85, 1)); break;
+    default: return '';
+  }
+  const rep = tex === 'gradient' || tex === 'rainbow' ? ' repeatS="false" repeatT="false"' : '';
+  const sc = tex === 'gradient' || tex === 'rainbow' ? '' : `<TextureTransform scale="${scale} ${scale}"/>`;
+  return `<PixelTexture image="${w} ${h} 3 ${px.map(hexPx).join(' ')}"${rep}/>${sc}`;
 }
 
-const colorName = (c) => {
-  const hit = Object.entries(DATA.COLORS).find(([, v]) => v[0] === c[0] && v[1] === c[1] && v[2] === c[2]);
-  return hit ? hit[0] : 'colored';
-};
-
-const BOX_WORDS = ['box', 'cube', 'block', 'brick', 'square', 'rectangle', 'crate', 'chest', 'slab', 'tile'];
-const aliasesByLength = Object.entries(DATA.SHAPE_ALIASES).sort((a, b) => b[0].length - a[0].length);
-const archiveKeys = Object.keys(DATA.ARCHIVE_EXAMPLES);
-
-function parsePrompt(text) {
-  const t = text.toLowerCase().trim();
-  if (!t) return { action: 'help', message: 'Try: add a red sphere, night, spin, clear' };
-
-  if (has(t, DATA.CLEAR_PHRASES)) return { action: 'clear' };
-  if (has(t, DATA.REMOVE_PHRASES)) return { action: 'remove_last' };
-  if (has(t, DATA.INSPECT_PHRASES)) return { action: 'inspect' };
-
-  const arch = t.match(new RegExp('\\b(load|fetch|import|open|get)\\b.*\\b(' + archiveKeys.join('|') + ')\\b'));
-  if (arch) return { action: 'load_archive', key: arch[2] };
-
-  if (has(t, DATA.CAM_RESET)) return { action: 'camera', view: 'reset' };
-  if (has(t, DATA.CAM_TOP)) return { action: 'camera', view: 'top' };
-  if (has(t, DATA.CAM_FRONT)) return { action: 'camera', view: 'front' };
-  if (has(t, DATA.CAM_SIDE)) return { action: 'camera', view: 'side' };
-  if (has(t, DATA.CAM_ISO)) return { action: 'camera', view: 'iso' };
-  if (has(t, DATA.CAM_ZOOM_IN)) return { action: 'camera', view: 'zoom_in' };
-  if (has(t, DATA.CAM_ZOOM_OUT)) return { action: 'camera', view: 'zoom_out' };
-
-  // Detect shape before lighting so "neon torus knot" is a shape, not a light preset.
-  let shapeFound = null;
-  for (const [alias, canonical] of aliasesByLength) {
-    if (wordRe(alias).test(t)) { shapeFound = canonical; break; }
+function appearanceXml(o, i) {
+  const c = o.color, tr = clamp(o.transparency || 0, 0, 0.98);
+  if (o.wire) {
+    return `<Appearance><Material DEF="mat_${i}" diffuseColor="0 0 0" emissiveColor="${c.map(f3).join(' ')}" transparency="${tr.toFixed(2)}"/></Appearance>`;
   }
-
-  if (shapeFound === null) {
-    if (has(t, DATA.LIGHT_SPOT)) return { action: 'add_light' };
-    if (has(t, DATA.LIGHT_NIGHT)) return { action: 'lighting', preset: 'night' };
-    if (has(t, DATA.LIGHT_SUNRISE)) return { action: 'lighting', preset: 'sunrise' };
-    if (has(t, DATA.LIGHT_DAY)) return { action: 'lighting', preset: 'day' };
-    if (/\bsun\b/.test(t)) return { action: 'lighting', preset: 'day' };
-    if (has(t, DATA.LIGHT_NEON)) return { action: 'lighting', preset: 'neon' };
-    if (has(t, DATA.LIGHT_BRIGHT)) return { action: 'lighting', preset: 'brighter' };
-    if (has(t, DATA.LIGHT_DIM)) return { action: 'lighting', preset: 'dimmer' };
+  const tex = o.texture ? textureXml(o.texture, c, o.color2 || null, o.texScale || 2) : '';
+  const d = tex ? [1, 1, 1] : c;
+  let spec = [0.4, 0.4, 0.4], shin = 0.6, emi = [0, 0, 0], diff = d;
+  switch (o.finish) {
+    case 'metal': diff = d.map((v) => v * 0.55); spec = mix(c, [1, 1, 1], 0.45); shin = 0.85; break;
+    case 'gloss': spec = [0.95, 0.95, 0.95]; shin = 0.95; break;
+    case 'matte': spec = [0, 0, 0]; shin = 0.03; break;
+    case 'glow': diff = d.map((v) => v * 0.4); emi = tex ? [0.4, 0.4, 0.4] : c.map((v) => v * 0.95); spec = [0.2, 0.2, 0.2]; shin = 0.3; break;
   }
+  return `<Appearance><Material DEF="mat_${i}" diffuseColor="${diff.map(f3).join(' ')}" specularColor="${spec.map(f3).join(' ')}" emissiveColor="${emi.map(f3).join(' ')}" shininess="${shin}" transparency="${tr.toFixed(2)}"/>${tex}</Appearance>`;
+}
 
-  const anim = parseAnimation(t);
-  if (anim && shapeFound === null) return { action: 'animate', anim };
+/* ── Geometry ──────────────────────────────────────────────────────────────── */
+// A mesh is { pts: [[x,y,z]], faces: [[i,j,k,...]], crease }. Faces wind CCW seen from outside.
 
-  const shape = shapeFound || 'box';
-  const color = parseColor(t);
-  const size = parseSize(t);
-  const position = parsePosition(t);
-  const rotation = parseRotation(t);
-  const coordM = t.match(/(?:at|position|pos|translate|move to|place at|put at)\s+([-\d.]+\s+[-\d.]+\s+[-\d.]+)/);
-  const count = parseCount(t, coordM ? coordM[0] : '');
-  const arrangement = count > 1 ? parseArrangement(t) : null;
-  const transparent = has(t, ['transparent', 'glass', 'see through', 'see-through', 'translucent', 'ghostly', 'ghost', 'crystal clear', 'invisible']);
+const mesh = (pts, faces, crease = 0) => ({ pts, faces, crease });
+const faceStr = (faces) => faces.map((f) => f.join(' ') + ' -1').join(' ');
+const parseIdx = (idxs) => idxs.map((s) => s.trim().split(/\s+/).map(Number).filter((n) => n >= 0));
 
-  const cname = colorName(color);
-  let message;
-  if (count > 1) {
-    const plural = /[xsz]$/.test(shape) ? shape + 'es' : shape + 's';
-    message = `Added ${count} ${cname} ${plural} ${arrangement === 'random' ? 'scattered' : 'in a ' + arrangement}.`;
-  } else {
-    message = `Added ${cname} ${shape} (size=${size.toFixed(2)}) at (${position.map((n) => n.toFixed(1)).join(', ')}).`;
+function merge(ms, crease = 0) {
+  const pts = [], faces = [];
+  for (const m of ms) { const o = pts.length; pts.push(...m.pts); m.faces.forEach((f) => faces.push(f.map((i) => i + o))); }
+  return mesh(pts, faces, crease);
+}
+const xform = (m, fn) => mesh(m.pts.map(fn), m.faces, m.crease);
+const shift = (m, dx, dy, dz) => xform(m, ([x, y, z]) => [x + dx, y + dy, z + dz]);
+const rotY = (m, a) => xform(m, ([x, y, z]) => [x * Math.cos(a) + z * Math.sin(a), y, -x * Math.sin(a) + z * Math.cos(a)]);
+
+/** Scale and centre a mesh so its largest half-extent equals s. */
+function fit(m, s) {
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  m.pts.forEach((p) => p.forEach((v, k) => { lo[k] = Math.min(lo[k], v); hi[k] = Math.max(hi[k], v); }));
+  const c = lo.map((v, k) => (v + hi[k]) / 2), r = Math.max(...hi.map((v, k) => (v - lo[k]) / 2)) || 1;
+  return xform(m, (p) => p.map((v, k) => ((v - c[k]) / r) * s));
+}
+
+function boxMesh(cx, cy, cz, hx, hy, hz) {
+  const pts = [];
+  for (const z of [-1, 1]) for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) pts.push([cx + x * hx, cy + y * hy, cz + z * hz]);
+  return mesh(pts, [[4, 5, 6, 7], [1, 0, 3, 2], [0, 4, 7, 3], [5, 1, 2, 6], [3, 7, 6, 2], [0, 1, 5, 4]]);
+}
+
+/** Surface of revolution about Y. profile = [[radius, y], ...] bottom to top (outward normals). */
+function revolve(profile, seg = 24, { closed = false, phase = 0, crease = 1.5 } = {}) {
+  const pts = [], rings = [];
+  for (const [r, y] of profile) {
+    if (Math.abs(r) < 1e-9) { rings.push([pts.length]); pts.push([0, y, 0]); continue; }
+    const ring = [];
+    for (let i = 0; i < seg; i++) { const a = phase + (2 * Math.PI * i) / seg; ring.push(pts.length); pts.push([r * Math.cos(a), y, -r * Math.sin(a)]); }
+    rings.push(ring);
   }
-  const ambiguous = shape === 'box' && !has(t, BOX_WORDS) && !has(t, ['make a scene', 'make something']);
-
-  return {
-    action: 'add', shape, color, position, size, rotation,
-    transparency: transparent ? 0.6 : 0.0,
-    animation: anim, count, arrangement, message, ambiguous,
+  const faces = [];
+  const link = (a, b) => {
+    if (a.length === 1 && b.length === 1) return;
+    for (let i = 0; i < seg; i++) {
+      const n = (i + 1) % seg;
+      if (a.length === 1) faces.push([a[0], b[n], b[i]]);
+      else if (b.length === 1) faces.push([a[i], a[n], b[0]]);
+      else faces.push([a[i], a[n], b[n], b[i]]);
+    }
   };
+  for (let k = 0; k < rings.length - 1; k++) link(rings[k], rings[k + 1]);
+  if (closed) link(rings[rings.length - 1], rings[0]);
+  return mesh(pts, faces, crease);
 }
 
-function multiPositions(count, arrangement, base, size) {
-  const [x0, y0, z0] = base;
-  const spacing = size * 2.5;
-  const out = [];
-  if (arrangement === 'row') {
-    const totalW = (count - 1) * spacing;
-    for (let i = 0; i < count; i++) out.push([x0 - totalW / 2 + i * spacing, y0, z0]);
-  } else if (arrangement === 'circle') {
-    const radius = Math.max((spacing * count) / (2 * Math.PI), spacing);
-    for (let i = 0; i < count; i++) {
-      const a = (2 * Math.PI * i) / count;
-      out.push([x0 + radius * Math.cos(a), y0, z0 + radius * Math.sin(a)]);
-    }
-  } else if (arrangement === 'grid') {
-    const cols = Math.ceil(Math.sqrt(count));
-    for (let i = 0; i < count; i++) {
-      const row = Math.floor(i / cols), col = i % cols;
-      out.push([x0 + col * spacing - ((cols - 1) * spacing) / 2, y0, z0 + row * spacing]);
-    }
-  } else {
-    const rnd = mulberry32(42);
-    const u = (a, b) => a + (b - a) * rnd();
-    for (let i = 0; i < count; i++) out.push([x0 + u(-4, 4), y0 + u(-1, 2), z0 + u(-2, 2)]);
+/** Open or wrapped parametric surface. fn(u, v) with u, v in [0, 1]. */
+function surf(fn, nu, nv, { wu = false, wv = false, twist = false, crease = 1.5 } = {}) {
+  const cu = wu ? nu : nu + 1, cv = wv ? nv : nv + 1, pts = [], faces = [];
+  for (let i = 0; i < cu; i++) for (let j = 0; j < cv; j++) pts.push(fn(i / nu, j / nv));
+  const id = (i, j) => {
+    if (i >= cu) { i = 0; if (twist) j = wv ? mod(cv - j, cv) : cv - 1 - j; }
+    return i * cv + (wv ? j % cv : j);
+  };
+  for (let i = 0; i < cu - (wu ? 0 : 1) + (wu ? 0 : 0); i++) {
+    for (let j = 0; j < cv - (wv ? 0 : 1); j++) faces.push([id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)]);
   }
-  return out;
+  return mesh(pts, faces, crease);
 }
 
-/* ── Shape geometry (all windings CCW from outside) ────────────────────────── */
-
-const mat = (r, g, b, tr) =>
-  `<Appearance><Material diffuseColor="${f3(r)} ${f3(g)} ${f3(b)}" specularColor="0.4 0.4 0.4" shininess="0.6" transparency="${tr.toFixed(2)}"/></Appearance>`;
-
-const ifs = (pts, idxs, crease = 1.5) =>
-  `<IndexedFaceSet coordIndex="${idxs.join(' ')}" solid="false" creaseAngle="${crease}" normalPerVertex="true">` +
-  `<Coordinate point="${pts.map((p) => `${f3(p[0])} ${f3(p[1])} ${f3(p[2])}`).join(' ')}"/></IndexedFaceSet>`;
-
-const shapeXml = (geo, m) => `      <Shape>${geo}${m}</Shape>\n`;
-
-function wrap(body, pos, rot, id, extraAttrs = '') {
-  const r = rot ? ` rotation="${rot[0]} ${rot[1]} ${rot[2]} ${rot[3].toFixed(4)}"` : '';
-  return `    <Transform DEF="obj_${id}" translation="${f3(pos[0])} ${f3(pos[1])} ${f3(pos[2])}"${extraAttrs}${r}>\n${body}    </Transform>\n`;
+/** Extrude a CCW 2D outline (star-shaped about its centroid) into a slab of half-depth d. */
+function extrude(poly, d, pillow = 0) {
+  let area = 0;
+  poly.forEach(([x, y], i) => { const [x2, y2] = poly[(i + 1) % poly.length]; area += x * y2 - x2 * y; });
+  if (area < 0) poly = [...poly].reverse();
+  const n = poly.length, cx = poly.reduce((a, p) => a + p[0], 0) / n, cy = poly.reduce((a, p) => a + p[1], 0) / n;
+  const pts = [...poly.map(([x, y]) => [x, y, d * (1 - pillow)]), ...poly.map(([x, y]) => [x, y, -d * (1 - pillow)]), [cx, cy, d], [cx, cy, -d]];
+  const faces = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    faces.push([2 * n, i, j]);
+    faces.push([2 * n + 1, n + j, n + i]);
+    faces.push([i, n + i, n + j, j]);
+  }
+  return mesh(pts, faces, pillow ? 1.0 : 0.3);
 }
 
-function buildTorus(size) {
-  const R = size, r = size * 0.34, U = 28, V = 16;
-  const pts = [], idxs = [];
-  for (let i = 0; i < U; i++) {
-    const a = (2 * Math.PI * i) / U;
-    for (let j = 0; j < V; j++) {
-      const b = (2 * Math.PI * j) / V;
-      pts.push([(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]);
-    }
-  }
-  for (let i = 0; i < U; i++) {
-    const ni = (i + 1) % U;
-    for (let j = 0; j < V; j++) {
-      const nj = (j + 1) % V;
-      idxs.push(`${i * V + j} ${i * V + nj} ${ni * V + nj} ${ni * V + j} -1`);
-    }
-  }
-  return [pts, idxs];
+function ringMesh(R, r, h, seg = 32) {
+  return revolve([[R, -h], [R, h], [r, h], [r, -h]], seg, { closed: true, crease: 0.9 });
+}
+
+/* Original shapes, kept as written; converted to meshes below. */
+function legacyTorus(size) {
+  const R = size, r = size * 0.34, U = 28, V = 16, pts = [], idxs = [];
+  for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; for (let j = 0; j < V; j++) { const b = (2 * Math.PI * j) / V; pts.push([(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]); } }
+  for (let i = 0; i < U; i++) { const ni = (i + 1) % U; for (let j = 0; j < V; j++) { const nj = (j + 1) % V; idxs.push(`${i * V + j} ${i * V + nj} ${ni * V + nj} ${ni * V + j} -1`); } }
+  return mesh(pts, parseIdx(idxs), 1.5);
 }
 
 function tubeSweep(path, tubeR, closed) {
@@ -564,253 +680,379 @@ function tubeSweep(path, tubeR, closed) {
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const pts = [];
   for (let i = 0; i < n; i++) {
-    const prev = closed ? path[mod(i - 1, n)] : path[Math.max(0, i - 1)];
-    const next = closed ? path[(i + 1) % n] : path[Math.min(n - 1, i + 1)];
-    const tan = norm(sub(next, prev));
-    const up = Math.abs(tan[1]) < 0.85 ? [0, 1, 0] : [1, 0, 0];
-    const N = norm(cross(tan, up));
-    const B = norm(cross(tan, N));
-    const [cx, cy, cz] = path[i];
-    for (let j = 0; j < T; j++) {
-      const a = (2 * Math.PI * j) / T, ca = Math.cos(a), sa = Math.sin(a);
-      pts.push([cx + tubeR * (ca * N[0] + sa * B[0]), cy + tubeR * (ca * N[1] + sa * B[1]), cz + tubeR * (ca * N[2] + sa * B[2])]);
+    const prev = closed ? path[mod(i - 1, n)] : path[Math.max(0, i - 1)], next = closed ? path[(i + 1) % n] : path[Math.min(n - 1, i + 1)];
+    const tan = norm(sub(next, prev)), up = Math.abs(tan[1]) < 0.85 ? [0, 1, 0] : [1, 0, 0], N = norm(cross(tan, up)), B = norm(cross(tan, N)), [cx, cy, cz] = path[i];
+    for (let j = 0; j < T; j++) { const a = (2 * Math.PI * j) / T, ca = Math.cos(a), sa = Math.sin(a); pts.push([cx + tubeR * (ca * N[0] + sa * B[0]), cy + tubeR * (ca * N[1] + sa * B[1]), cz + tubeR * (ca * N[2] + sa * B[2])]); }
+  }
+  const faces = [], rings = closed ? n : n - 1;
+  for (let i = 0; i < rings; i++) { const ni = closed ? (i + 1) % n : i + 1; for (let j = 0; j < T; j++) { const nj = (j + 1) % T; faces.push([i * T + j, i * T + nj, ni * T + nj, ni * T + j]); } }
+  return mesh(pts, faces, 1.5);
+}
+
+function legacyPoly(shape, s) {
+  switch (shape) {
+    case 'tetrahedron': { const h = s * Math.sqrt(2 / 3), r = s / Math.sqrt(3); return mesh([[r, -h / 2, 0], [-r / 2, -h / 2, (r * Math.sqrt(3)) / 2], [-r / 2, -h / 2, -(r * Math.sqrt(3)) / 2], [0, h, 0]], [[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]]); }
+    case 'octahedron': return mesh([[s, 0, 0], [-s, 0, 0], [0, s, 0], [0, -s, 0], [0, 0, s], [0, 0, -s]], parseIdx(['2 0 4 -1', '2 4 1 -1', '2 1 5 -1', '2 5 0 -1', '3 4 0 -1', '3 1 4 -1', '3 5 1 -1', '3 0 5 -1']));
+    case 'icosahedron': {
+      const t = (1 + Math.sqrt(5)) / 2, nl = Math.sqrt(1 + t * t);
+      const raw = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
+      const f = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
+      const faces = []; for (let i = 0; i < f.length; i += 3) faces.push([f[i], f[i + 1], f[i + 2]]);
+      return mesh(raw.map(([x, y, z]) => [(x / nl) * s, (y / nl) * s, (z / nl) * s]), faces, 0.5);
+    }
+    case 'dodecahedron': {
+      const p = (1 + Math.sqrt(5)) / 2, b = 1 / p, v = [];
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * s, sy * s, sz * s]);
+      for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([0, sy * b * s, sz * p * s]);
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) v.push([sx * b * s, sy * p * s, 0]);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * p * s, 0, sz * b * s]);
+      return mesh(v, [[0, 8, 4, 14, 12], [0, 16, 2, 10, 8], [0, 12, 1, 17, 16], [1, 12, 14, 5, 9], [1, 9, 11, 3, 17], [2, 13, 15, 6, 10], [2, 16, 17, 3, 13], [3, 11, 7, 15, 13], [4, 8, 10, 6, 18], [4, 18, 19, 5, 14], [5, 19, 7, 11, 9], [6, 15, 7, 19, 18]]);
     }
   }
-  const idxs = [];
-  const rings = closed ? n : n - 1;
-  for (let i = 0; i < rings; i++) {
-    const ni = closed ? (i + 1) % n : i + 1;
-    for (let j = 0; j < T; j++) {
-      const nj = (j + 1) % T;
-      idxs.push(`${i * T + j} ${i * T + nj} ${ni * T + nj} ${ni * T + j} -1`);
-    }
-  }
-  return [pts, idxs];
 }
 
-function buildTetrahedron(s) {
-  const h = s * Math.sqrt(2 / 3), r = s / Math.sqrt(3);
-  return [
-    [[r, -h / 2, 0], [-r / 2, -h / 2, (r * Math.sqrt(3)) / 2], [-r / 2, -h / 2, -(r * Math.sqrt(3)) / 2], [0, h, 0]],
-    ['0 2 1 -1', '0 1 3 -1', '1 2 3 -1', '0 3 2 -1'],
-  ];
+function legacyStar(s) {
+  const OR = s, IR = s * 0.4, d = s * 0.25, N = 5, n = N * 2, front = [], back = [];
+  for (let i = 0; i < n; i++) { const ang = (Math.PI / N) * i - Math.PI / 2, r = i % 2 === 0 ? OR : IR; front.push([Math.cos(ang) * r, Math.sin(ang) * r, d]); back.push([Math.cos(ang) * r, Math.sin(ang) * r, -d]); }
+  const pts = [...front, [0, 0, d], ...back, [0, 0, -d]], fc = n, bc = 2 * n + 1, faces = [];
+  for (let i = 0; i < n; i++) faces.push([fc, i, (i + 1) % n]);
+  for (let i = 0; i < n; i++) faces.push([bc, n + 1 + ((i + 1) % n), n + 1 + i]);
+  for (let i = 0; i < n; i++) { const ni = (i + 1) % n; faces.push([i, ni, n + 1 + ni, n + 1 + i]); }
+  return mesh(pts, faces);
 }
 
-function buildOctahedron(s) {
-  return [
-    [[s, 0, 0], [-s, 0, 0], [0, s, 0], [0, -s, 0], [0, 0, s], [0, 0, -s]],
-    ['2 0 4 -1', '2 4 1 -1', '2 1 5 -1', '2 5 0 -1', '3 4 0 -1', '3 1 4 -1', '3 5 1 -1', '3 0 5 -1'],
-  ];
-}
-
-function buildIcosahedron(s) {
-  const t = (1 + Math.sqrt(5)) / 2, nl = Math.sqrt(1 + t * t);
-  const raw = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
-  const pts = raw.map(([x, y, z]) => [(x / nl) * s, (y / nl) * s, (z / nl) * s]);
-  const f = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
-    3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1];
-  const idxs = [];
-  for (let i = 0; i < f.length; i += 3) idxs.push(`${f[i]} ${f[i + 1]} ${f[i + 2]} -1`);
-  return [pts, idxs];
-}
-
-function buildDodecahedron(s) {
-  const p = (1 + Math.sqrt(5)) / 2, b = 1 / p, v = [];
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * s, sy * s, sz * s]);
-  for (const sy of [-1, 1]) for (const sz of [-1, 1]) v.push([0, sy * b * s, sz * p * s]);
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) v.push([sx * b * s, sy * p * s, 0]);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) v.push([sx * p * s, 0, sz * b * s]);
-  const faces = [[0, 8, 4, 14, 12], [0, 16, 2, 10, 8], [0, 12, 1, 17, 16], [1, 12, 14, 5, 9], [1, 9, 11, 3, 17], [2, 13, 15, 6, 10],
-    [2, 16, 17, 3, 13], [3, 11, 7, 15, 13], [4, 8, 10, 6, 18], [4, 18, 19, 5, 14], [5, 19, 7, 11, 9], [6, 15, 7, 19, 18]];
-  return [v, faces.map((f) => f.join(' ') + ' -1')];
-}
-
-function buildStar(s) {
-  const OR = s, IR = s * 0.4, d = s * 0.25, N = 5, n = N * 2;
-  const front = [], back = [];
-  for (let i = 0; i < n; i++) {
-    const ang = (Math.PI / N) * i - Math.PI / 2, r = i % 2 === 0 ? OR : IR;
-    front.push([Math.cos(ang) * r, Math.sin(ang) * r, d]);
-    back.push([Math.cos(ang) * r, Math.sin(ang) * r, -d]);
-  }
-  const pts = [...front, [0, 0, d], ...back, [0, 0, -d]];
-  const fc = n, bc = 2 * n + 1, idxs = [];
-  for (let i = 0; i < n; i++) idxs.push(`${fc} ${i} ${(i + 1) % n} -1`);
-  for (let i = 0; i < n; i++) idxs.push(`${bc} ${n + 1 + ((i + 1) % n)} ${n + 1 + i} -1`);
-  for (let i = 0; i < n; i++) { const ni = (i + 1) % n; idxs.push(`${i} ${ni} ${n + 1 + ni} ${n + 1 + i} -1`); }
-  return [pts, idxs];
-}
-
-function buildArrow(s) {
+function legacyArrow(s) {
   const sw = s * 0.16, sh = s * 1.1, hw = s * 0.4, hh = s * 0.75;
-  const pts = [[-sw, 0, -sw], [sw, 0, -sw], [sw, 0, sw], [-sw, 0, sw], [-sw, sh, -sw], [sw, sh, -sw], [sw, sh, sw], [-sw, sh, sw],
-    [-hw, sh, -hw], [hw, sh, -hw], [hw, sh, hw], [-hw, sh, hw], [0, sh + hh, 0]];
-  return [pts, ['3 2 1 0 -1', '0 1 5 4 -1', '1 2 6 5 -1', '2 3 7 6 -1', '3 0 4 7 -1', '11 10 9 8 -1',
-    '12 8 9 -1', '12 9 10 -1', '12 10 11 -1', '12 11 8 -1']];
+  const pts = [[-sw, 0, -sw], [sw, 0, -sw], [sw, 0, sw], [-sw, 0, sw], [-sw, sh, -sw], [sw, sh, -sw], [sw, sh, sw], [-sw, sh, sw], [-hw, sh, -hw], [hw, sh, -hw], [hw, sh, hw], [-hw, sh, hw], [0, sh + hh, 0]];
+  return mesh(pts, parseIdx(['3 2 1 0 -1', '0 1 5 4 -1', '1 2 6 5 -1', '2 3 7 6 -1', '3 0 4 7 -1', '11 10 9 8 -1', '12 8 9 -1', '12 9 10 -1', '12 10 11 -1', '12 11 8 -1']), 0.3);
 }
 
-function buildCapsule(s) {
-  const r = s * 0.44, h = s * 1.2, U = 20, V = 10;
-  const pts = [], idxs = [];
+function legacyCapsule(s) {
+  const r = s * 0.44, h = s * 1.2, U = 20, V = 10, pts = [], faces = [];
   for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([r * Math.cos(a), h / 2, r * Math.sin(a)]); }
   for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([r * Math.cos(a), -h / 2, r * Math.sin(a)]); }
-  for (let i = 0; i < U; i++) { const ni = (i + 1) % U; idxs.push(`${i} ${ni} ${U + ni} ${U + i} -1`); }
-
+  for (let i = 0; i < U; i++) { const ni = (i + 1) % U; faces.push([i, ni, U + ni, U + i]); }
   const addCap = (sign) => {
     const base = pts.length;
-    for (let lat = 1; lat < V; lat++) {
-      const phi = ((Math.PI / 2) * lat) / V, rr = r * Math.cos(phi), yy = sign * (h / 2 + r * Math.sin(phi));
-      for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([rr * Math.cos(a), yy, rr * Math.sin(a)]); }
-    }
-    const tip = pts.length;
-    pts.push([0, sign * (h / 2 + r), 0]);
+    for (let lat = 1; lat < V; lat++) { const phi = ((Math.PI / 2) * lat) / V, rr = r * Math.cos(phi), yy = sign * (h / 2 + r * Math.sin(phi)); for (let i = 0; i < U; i++) { const a = (2 * Math.PI * i) / U; pts.push([rr * Math.cos(a), yy, rr * Math.sin(a)]); } }
+    const tip = pts.length; pts.push([0, sign * (h / 2 + r), 0]);
     const ring0 = sign > 0 ? 0 : U;
-    for (let i = 0; i < U; i++) {
-      const ni = (i + 1) % U;
-      idxs.push(sign > 0 ? `${ring0 + i} ${ring0 + ni} ${base + ni} ${base + i} -1`
-                         : `${ring0 + i} ${base + i} ${base + ni} ${ring0 + ni} -1`);
-    }
-    for (let lat = 1; lat < V - 1; lat++) {
-      const pr = base + (lat - 1) * U, cu = base + lat * U;
-      for (let i = 0; i < U; i++) {
-        const ni = (i + 1) % U;
-        idxs.push(sign > 0 ? `${pr + i} ${pr + ni} ${cu + ni} ${cu + i} -1`
-                           : `${pr + i} ${cu + i} ${cu + ni} ${pr + ni} -1`);
-      }
-    }
+    for (let i = 0; i < U; i++) { const ni = (i + 1) % U; faces.push(sign > 0 ? [ring0 + i, ring0 + ni, base + ni, base + i] : [ring0 + i, base + i, base + ni, ring0 + ni]); }
+    for (let lat = 1; lat < V - 1; lat++) { const pr = base + (lat - 1) * U, cu = base + lat * U; for (let i = 0; i < U; i++) { const ni = (i + 1) % U; faces.push(sign > 0 ? [pr + i, pr + ni, cu + ni, cu + i] : [pr + i, cu + i, cu + ni, pr + ni]); } }
     const last = base + (V - 2) * U;
-    for (let i = 0; i < U; i++) {
-      const ni = (i + 1) % U;
-      idxs.push(sign > 0 ? `${last + i} ${last + ni} ${tip} -1` : `${tip} ${last + ni} ${last + i} -1`);
-    }
+    for (let i = 0; i < U; i++) { const ni = (i + 1) % U; faces.push(sign > 0 ? [last + i, last + ni, tip] : [tip, last + ni, last + i]); }
   };
-  addCap(1);
-  addCap(-1);
-  return [pts, idxs];
+  addCap(1); addCap(-1);
+  return mesh(pts, faces, 1.5);
 }
 
-function crossXml(s, m) {
-  const w = s * 0.36, L = s * 1.8;
-  return '      <Group>\n' +
-    `        <Shape><Box size="${f3(L)} ${f3(w)} ${f3(w)}"/>${m}</Shape>\n` +
-    `        <Shape><Box size="${f3(w)} ${f3(L)} ${f3(w)}"/>${m}</Shape>\n` +
-    `        <Shape><Box size="${f3(w)} ${f3(w)} ${f3(L)}"/>${m}</Shape>\n` +
-    '      </Group>\n';
+function legacyCrescent(s) {
+  const OR = s, IR = s * 0.6, off = s * 0.32, d = s * 0.22, N = 32, outer = [], inner = [];
+  for (let i = 0; i < N; i++) { const a = (2 * Math.PI * i) / N; outer.push([OR * Math.cos(a), OR * Math.sin(a)]); inner.push([IR * Math.cos(a) + off, IR * Math.sin(a)]); }
+  const pts = [...outer.map(([x, y]) => [x, y, d]), ...inner.map(([x, y]) => [x, y, d]), ...outer.map(([x, y]) => [x, y, -d]), ...inner.map(([x, y]) => [x, y, -d])], faces = [];
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; faces.push([i, N + i, N + ni, ni]); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; faces.push([2 * N + i, 2 * N + ni, 3 * N + ni, 3 * N + i]); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; faces.push([i, ni, 2 * N + ni, 2 * N + i]); }
+  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; faces.push([N + i, 3 * N + i, 3 * N + ni, N + ni]); }
+  return mesh(pts, faces);
 }
 
-function buildCrescent(s) {
-  const OR = s, IR = s * 0.6, off = s * 0.32, d = s * 0.22, N = 32;
-  const outer = [], inner = [];
-  for (let i = 0; i < N; i++) {
-    const a = (2 * Math.PI * i) / N;
-    outer.push([OR * Math.cos(a), OR * Math.sin(a)]);
-    inner.push([IR * Math.cos(a) + off, IR * Math.sin(a)]);
-  }
-  const pts = [...outer.map(([x, y]) => [x, y, d]), ...inner.map(([x, y]) => [x, y, d]),
-    ...outer.map(([x, y]) => [x, y, -d]), ...inner.map(([x, y]) => [x, y, -d])];
-  const idxs = [];
-  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${i} ${N + i} ${N + ni} ${ni} -1`); }
-  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${2 * N + i} ${2 * N + ni} ${3 * N + ni} ${3 * N + i} -1`); }
-  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${i} ${ni} ${2 * N + ni} ${2 * N + i} -1`); }
-  for (let i = 0; i < N; i++) { const ni = (i + 1) % N; idxs.push(`${N + i} ${3 * N + i} ${3 * N + ni} ${N + ni} -1`); }
-  return [pts, idxs];
-}
-
-function helixPath(s) {
-  const turns = 3, segs = 48, R = s * 0.7, pitch = s * 0.52, path = [];
-  for (let i = 0; i <= turns * segs; i++) {
-    path.push([R * Math.cos((2 * Math.PI * i) / segs), (pitch * i) / segs - (pitch * turns) / 2, R * Math.sin((2 * Math.PI * i) / segs)]);
-  }
-  return path;
-}
-
-function torusKnotPath(s) {
-  const segs = 96, p = 2, q = 3, R = s * 0.65, r = s * 0.24, path = [];
-  for (let i = 0; i < segs; i++) {
-    const t = (2 * Math.PI * i) / segs;
-    path.push([(R + r * Math.cos(q * t)) * Math.cos(p * t), (R + r * Math.cos(q * t)) * Math.sin(p * t), r * Math.sin(q * t)]);
-  }
-  return path;
-}
-
-function buildPlane(s) {
-  const S = s * 2, D = 6, step = (S * 2) / D, pts = [], idxs = [];
+function legacyPlane(s) {
+  const S = s * 2, D = 6, step = (S * 2) / D, pts = [], faces = [];
   for (let r = 0; r <= D; r++) for (let c = 0; c <= D; c++) pts.push([-S + c * step, 0, -S + r * step]);
-  for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) {
-    const a = r * (D + 1) + c;
-    idxs.push(`${a} ${a + 1} ${(r + 1) * (D + 1) + c + 1} ${(r + 1) * (D + 1) + c} -1`);
-  }
-  return [pts, idxs];
+  for (let r = 0; r < D; r++) for (let c = 0; c < D; c++) { const a = r * (D + 1) + c; faces.push([a, a + 1, (r + 1) * (D + 1) + c + 1, (r + 1) * (D + 1) + c]); }
+  return mesh(pts, faces);
 }
 
-/** Returns { xml, baseScale } for one shape instance. */
-function buildShape(shape, color, pos, s, rot, transparency, id) {
-  const [r, g, b] = color;
-  const m = mat(r, g, b, transparency);
-  const box = () => { const d = f3(s * 2); return `<Box size="${d} ${d} ${d}"/>`; };
-  let baseScale = [1, 1, 1];
-  let body;
+const helixPath = (s) => { const turns = 3, segs = 48, R = s * 0.7, pitch = s * 0.52, p = []; for (let i = 0; i <= turns * segs; i++) p.push([R * Math.cos((2 * Math.PI * i) / segs), (pitch * i) / segs - (pitch * turns) / 2, R * Math.sin((2 * Math.PI * i) / segs)]); return p; };
+const knotPath = (s, p, q) => { const segs = 128, R = s * 0.65, r = s * 0.24, path = []; for (let i = 0; i < segs; i++) { const t = (2 * Math.PI * i) / segs; path.push([(R + r * Math.cos(q * t)) * Math.cos(p * t), (R + r * Math.cos(q * t)) * Math.sin(p * t), r * Math.sin(q * t)]); } return path; };
+
+/* New shapes */
+
+function heartPoly(s, n = 48) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const t = (2 * Math.PI * i) / n; out.push([(16 * Math.sin(t) ** 3 / 17) * s, ((13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 17) * s * 1.0]); }
+  return out;
+}
+
+function gearMesh(s, teeth = 12) {
+  const R = s, root = s * 0.8, hole = s * 0.28, d = s * 0.25, N = teeth * 4, outer = [], inner = [];
+  for (let k = 0; k < teeth; k++) {
+    const a0 = (2 * Math.PI * k) / teeth, w = (2 * Math.PI) / teeth;
+    [[0.0, root], [0.22, R], [0.5, R], [0.72, root]].forEach(([f, r]) => outer.push([r * Math.cos(a0 + f * w), r * Math.sin(a0 + f * w)]));
+  }
+  for (let i = 0; i < N; i++) { const a = (2 * Math.PI * i) / N; inner.push([hole * Math.cos(a), hole * Math.sin(a)]); }
+  const pts = [...outer.map(([x, y]) => [x, y, d]), ...inner.map(([x, y]) => [x, y, d]), ...outer.map(([x, y]) => [x, y, -d]), ...inner.map(([x, y]) => [x, y, -d])], faces = [];
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    faces.push([i, N + i, N + j, j]);                         // front ring
+    faces.push([2 * N + i, 2 * N + j, 3 * N + j, 3 * N + i]); // back ring
+    faces.push([i, j, 2 * N + j, 2 * N + i]);                 // outer wall
+    faces.push([N + i, 3 * N + i, 3 * N + j, N + j]);         // bore
+  }
+  return mesh(pts, faces, 0.4);
+}
+
+function stairsMesh(s, n = 6) {
+  const d = (2 * s) / n;
+  return merge(Array.from({ length: n }, (_, k) => { const h = ((k + 1) / n) * 2 * s; return boxMesh(0, -s + h / 2, -s + (k + 0.5) * d, s * 0.8, h / 2, d / 2); }));
+}
+
+function spiralStairs(s, n = 16) {
+  return merge(Array.from({ length: n }, (_, k) => {
+    const a = (k / n) * Math.PI * 3, h = s * 0.08;
+    const step = shift(rotY(merge([boxMesh(s * 0.5, 0, 0, s * 0.45, h, s * 0.2)]), -a), 0, -s + (k / n) * 2 * s, 0);
+    return step;
+  }).concat([revolve([[0, -s], [s * 0.1, -s], [s * 0.1, s * 1.1], [0, s * 1.1]], 12, { crease: 1 })]));
+}
+
+function surfaceShape(shape, s) {
+  const PI = Math.PI;
   switch (shape) {
-    case 'sphere': body = shapeXml(`<Sphere radius="${f3(s)}"/>`, m); break;
-    case 'cone': body = shapeXml(`<Cone bottomRadius="${f3(s)}" height="${f3(s * 2)}"/>`, m); break;
-    case 'cylinder': body = shapeXml(`<Cylinder radius="${f3(s)}" height="${f3(s * 2)}"/>`, m); break;
-    case 'box': body = shapeXml(box(), m); break;
-    case 'ellipsoid': {
-      baseScale = [1.0, 0.65, 1.45];
-      body = shapeXml(`<Sphere radius="${f3(s)}"/>`, m);
-      return { xml: wrap(body, pos, rot, id, ' scale="1.0 0.65 1.45"'), baseScale };
+    case 'mobius': return fit(surf((u, v) => { const a = u * 2 * PI, w = (v - 0.5) * 1.0; return [(1 + w * Math.cos(a / 2)) * Math.cos(a), w * Math.sin(a / 2), (1 + w * Math.cos(a / 2)) * Math.sin(a)]; }, 72, 8, { wu: true, twist: true, crease: 1.2 }), s);
+    case 'klein': return fit(surf((u, v) => { const a = u * 2 * PI, b = v * 2 * PI, r = 2 + Math.cos(a / 2) * Math.sin(b) - Math.sin(a / 2) * Math.sin(2 * b); return [r * Math.cos(a), Math.sin(a / 2) * Math.sin(b) + Math.cos(a / 2) * Math.sin(2 * b), r * Math.sin(a)]; }, 64, 32, { wu: true, wv: true, twist: true }), s);
+    case 'saddle': return fit(surf((u, v) => { const x = u * 2 - 1, z = v * 2 - 1; return [x, (x * x - z * z) * 0.8, z]; }, 20, 20, { crease: 1.5 }), s);
+    case 'catenoid': return fit(surf((u, v) => { const a = u * 2 * PI, t = (v - 0.5) * 2.4; return [Math.cosh(t) * Math.cos(a), t, Math.cosh(t) * Math.sin(a)]; }, 36, 16, { wu: true }), s);
+    case 'helicoid': return fit(surf((u, v) => { const a = u * 4 * PI, r = v * 1.4; return [r * Math.cos(a), a * 0.22, r * Math.sin(a)]; }, 80, 6, { crease: 1.0 }), s);
+    case 'pseudosphere': return fit(surf((u, v) => { const a = u * 2 * PI, t = 0.12 + v * 2.6, r = 1 / Math.cosh(t); return [r * Math.cos(a), t - Math.tanh(t), r * Math.sin(a)]; }, 36, 24, { wu: true }), s);
+    case 'ripple': return fit(surf((u, v) => { const x = (u - 0.5) * 6, z = (v - 0.5) * 6, r = Math.hypot(x, z); return [x, Math.sin(r * 2.2) / (1 + r * 0.6), z]; }, 40, 40), s);
+    case 'terrain': { const h = (x, z) => 0.5 * Math.sin(x * 1.3) * Math.cos(z * 1.1) + 0.28 * Math.sin(x * 2.7 + z * 1.9) + 0.14 * Math.cos(z * 4.1 - x * 0.7); return fit(surf((u, v) => { const x = (u - 0.5) * 6, z = (v - 0.5) * 6; return [x, h(x, z), z]; }, 36, 36), s); }
+    case 'shell': return fit(surf((u, v) => { const a = u * 6 * PI, b = v * 2 * PI, e = Math.exp(a / (6 * PI)); return [(1 - e) * Math.cos(a) * Math.cos(b / 2) ** 2, (e - 1) * Math.sin(a) * Math.cos(b / 2) ** 2, 1 - Math.exp(a / (3 * PI)) - Math.sin(b) + e * Math.sin(b)]; }, 90, 24, { wv: true }), s);
+  }
+  return null;
+}
+
+const FIT_SHAPES = new Set(['table', 'chair', 'stairs', 'spiralstairs', 'arch', 'house', 'snowman', 'rocket', 'tower', 'tree', 'vase', 'mushroom', 'heart', 'bowl', 'dome']);
+/** Mesh for any solid shape. Primitives that X3D has natively are also meshed here for wireframe mode. */
+function meshOf(shape, s) {
+  const m = rawMeshOf(shape, s);
+  return FIT_SHAPES.has(shape) ? fit(m, s) : m;
+}
+
+function rawMeshOf(shape, s) {
+  switch (shape) {
+    case 'sphere': case 'ellipsoid': return revolve(Array.from({ length: 17 }, (_, k) => { const p = (k / 16) * Math.PI; return [s * Math.sin(p), -s * Math.cos(p)]; }), 24);
+    case 'cone': return revolve([[0, -s], [s, -s], [0, s]], 24);
+    case 'cylinder': return revolve([[0, -s], [s, -s], [s, s], [0, s]], 24, { crease: 0.9 });
+    case 'box': return boxMesh(0, 0, 0, s, s, s);
+    case 'cross': { const w = s * 0.18, L = s * 0.9; return merge([boxMesh(0, 0, 0, L, w, w), boxMesh(0, 0, 0, w, L, w), boxMesh(0, 0, 0, w, w, L)]); }
+    case 'torus': return legacyTorus(s);
+    case 'tetrahedron': case 'octahedron': case 'icosahedron': case 'dodecahedron': return legacyPoly(shape, s);
+    case 'star': return legacyStar(s);
+    case 'arrow': return legacyArrow(s);
+    case 'capsule': return legacyCapsule(s);
+    case 'crescent': return legacyCrescent(s);
+    case 'plane': return legacyPlane(s);
+    case 'helix': return tubeSweep(helixPath(s), s * 0.09, false);
+    case 'torusknot': return tubeSweep(knotPath(s, 2, 3), s * 0.09, true);
+    case 'cinquefoil': return tubeSweep(knotPath(s, 2, 5), s * 0.08, true);
+    case 'pyramid': return revolve([[0, -s], [s * 1.3, -s], [0, s]], 4, { phase: Math.PI / 4, crease: 0 });
+    case 'prism': return extrude([[-s, -s * 0.8], [s, -s * 0.8], [0, s * 0.95]], s);
+    case 'wedge': return extrude([[-s, -s], [s, -s], [s, s]], s * 0.8);
+    case 'disc': return revolve([[0, -s * 0.12], [s * 1.2, -s * 0.12], [s * 1.2, s * 0.12], [0, s * 0.12]], 40, { crease: 0.9 });
+    case 'washer': return ringMesh(s * 1.2, s * 0.6, s * 0.1, 40);
+    case 'tube': return ringMesh(s * 0.8, s * 0.55, s, 32);
+    case 'dome': return revolve([[0, -s * 0.5], [s, -s * 0.5], ...Array.from({ length: 12 }, (_, k) => { const p = ((k + 1) / 12) * (Math.PI / 2); return [s * Math.cos(p), -s * 0.5 + s * Math.sin(p)]; })], 32);
+    case 'bowl': return bowlMesh(s);
+    case 'gem': return revolve([[0, -s], [s * 0.9, s * 0.15], [s * 0.9, s * 0.25], [s * 0.55, s * 0.5], [0, s * 0.5]], 8, { crease: 0 });
+    case 'crystal': return revolve([[0, -s * 1.2], [s * 0.5, -s * 0.7], [s * 0.5, s * 0.7], [0, s * 1.2]], 6, { crease: 0 });
+    case 'heart': return extrude(heartPoly(s), s * 0.3, 0.55);
+    case 'gear': return gearMesh(s);
+    case 'tree': return revolve([[0, -s], [s * 0.14, -s], [s * 0.14, -s * 0.45], [s * 0.75, -s * 0.45], [s * 0.2, 0], [s * 0.6, 0], [s * 0.15, s * 0.5], [s * 0.45, s * 0.5], [0, s * 1.1]], 16, { crease: 0.6 });
+    case 'house': return merge([boxMesh(0, -s * 0.3, 0, s * 0.9, s * 0.6, s * 0.7), shift(extrude([[-s * 1.05, 0], [s * 1.05, 0], [0, s * 0.7]], s * 0.78), 0, s * 0.3, 0)]);
+    case 'tower': return revolve([[0, -s], [s * 0.5, -s], [s * 0.5, s * 0.3], [s * 0.65, s * 0.3], [s * 0.65, s * 0.5], [0, s * 1.3]], 20, { crease: 0.6 });
+    case 'rocket': {
+      const body = revolve([[0, -s], [s * 0.3, -s], [s * 0.4, -s * 0.8], [s * 0.4, s * 0.3], [s * 0.3, s * 0.7], [s * 0.12, s], [0, s * 1.15]], 20, { crease: 0.9 });
+      const fin = extrude([[s * 0.35, -s * 0.9], [s * 0.9, -s * 1.15], [s * 0.35, -s * 0.2]], s * 0.03);
+      const fins = [0, 1, 2].map((k) => rotY(xform(fin, ([x, y, z]) => [x, y, z]), (k * 2 * Math.PI) / 3));
+      return merge([body, ...fins]);
     }
-    case 'cross': body = crossXml(s, m); break;
-    default: {
-      let pts, idxs, crease = 0;
-      switch (shape) {
-        case 'torus': [pts, idxs] = buildTorus(s); crease = 1.5; break;
-        case 'tetrahedron': [pts, idxs] = buildTetrahedron(s); break;
-        case 'octahedron': [pts, idxs] = buildOctahedron(s); break;
-        case 'icosahedron': [pts, idxs] = buildIcosahedron(s); crease = 0.5; break;
-        case 'dodecahedron': [pts, idxs] = buildDodecahedron(s); break;
-        case 'star': [pts, idxs] = buildStar(s); break;
-        case 'arrow': [pts, idxs] = buildArrow(s); crease = 0.3; break;
-        case 'capsule': [pts, idxs] = buildCapsule(s); crease = 1.5; break;
-        case 'crescent': [pts, idxs] = buildCrescent(s); break;
-        case 'helix': [pts, idxs] = tubeSweep(helixPath(s), s * 0.09, false); crease = 1.5; break;
-        case 'torusknot': [pts, idxs] = tubeSweep(torusKnotPath(s), s * 0.09, true); crease = 1.5; break;
-        case 'plane': [pts, idxs] = buildPlane(s); break;
-        default: body = shapeXml(box(), m);
+    case 'vase': return revolve([[0, -s], [s * 0.45, -s], [s * 0.6, -s * 0.7], [s * 0.72, -s * 0.2], [s * 0.66, s * 0.2], [s * 0.4, s * 0.55], [s * 0.3, s * 0.8], [s * 0.38, s], [s * 0.25, s], [0, s]], 24);
+    case 'mushroom': return revolve([[0, -s], [s * 0.28, -s], [s * 0.24, -s * 0.2], [s * 0.95, -s * 0.15], [s * 0.95, 0], [s * 0.75, s * 0.4], [s * 0.4, s * 0.75], [0, s * 0.9]], 24, { crease: 0.9 });
+    case 'snowman': return merge([[0.7, -0.7], [0.5, 0.2], [0.34, 0.85]].map(([r, y]) => shift(rawMeshOf('sphere', s * r), 0, s * y, 0)));
+    case 'table': { const leg = (x, z) => boxMesh(x * s * 0.85, -s * 0.5, z * s * 0.85, s * 0.08, s * 0.5, s * 0.08); return merge([boxMesh(0, s * 0.05, 0, s, s * 0.07, s * 0.8), leg(1, 0.8), leg(-1, 0.8), leg(1, -0.8), leg(-1, -0.8)].map((m) => shift(m, 0, 0, 0))); }
+    case 'chair': { const leg = (x, z) => boxMesh(x * s * 0.5, -s * 0.55, z * s * 0.5, s * 0.07, s * 0.45, s * 0.07); return merge([boxMesh(0, -s * 0.05, 0, s * 0.6, s * 0.07, s * 0.6), boxMesh(0, s * 0.5, -s * 0.55, s * 0.6, s * 0.5, s * 0.06), leg(1, 1), leg(-1, 1), leg(1, -1), leg(-1, -1)]); }
+    case 'stairs': return stairsMesh(s);
+    case 'spiralstairs': return spiralStairs(s);
+    case 'arch': {
+      const R = s * 0.8, r = s * 0.22, top = surf((u, v) => { const a = u * Math.PI, b = v * 2 * Math.PI; return [(R + r * Math.cos(b)) * Math.cos(a), (R + r * Math.cos(b)) * Math.sin(a) + 0, r * Math.sin(b)]; }, 20, 10, { wv: true });
+      return merge([shift(top, 0, -s * 0.1, 0), boxMesh(R, -s * 0.55, 0, r, s * 0.45, r), boxMesh(-R, -s * 0.55, 0, r, s * 0.45, r)]);
+    }
+    default: { const m = surfaceShape(shape, s); return m || boxMesh(0, 0, 0, s, s, s); }
+  }
+}
+
+function bowlMesh(s) {
+  const n = 12, R = s, r = s * 0.88, out = [], inn = [];
+  for (let k = 0; k <= n; k++) { const p = (k / n) * (Math.PI / 2); out.push([R * Math.cos(p), -R * Math.sin(p) + s * 0.5]); inn.push([r * Math.cos(p), -r * Math.sin(p) + s * 0.5]); }
+  // inner wall down to the pole, outer wall back up to the rim, then the rim closes the loop
+  return revolve([...inn, ...out.reverse()], 32, { closed: true });
+}
+
+function linesOf(shape, s) {
+  if (shape === 'tesseract') {
+    const v = [];
+    for (let i = 0; i < 16; i++) v.push([i & 1 ? 1 : -1, i & 2 ? 1 : -1, i & 4 ? 1 : -1, i & 8 ? 1 : -1]);
+    const a = 0.6, b = 0.45, pts = v.map(([x, y, z, w]) => {
+      const x1 = x * Math.cos(a) - w * Math.sin(a), w1 = x * Math.sin(a) + w * Math.cos(a);
+      const z1 = z * Math.cos(b) - w1 * Math.sin(b), w2 = z * Math.sin(b) + w1 * Math.cos(b), k = 1 / (2.6 - w2);
+      return [x1 * k, y * k, z1 * k];
+    });
+    const edges = [];
+    for (let i = 0; i < 16; i++) for (let k = 0; k < 4; k++) if (!(i & (1 << k))) edges.push([i, i | (1 << k)]);
+    return { pts: fit(mesh(pts, []), s).pts, edges };
+  }
+  return null;
+}
+
+/* ── Object → X3D ──────────────────────────────────────────────────────────── */
+
+const xmlEsc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&apos;').replace(/"/g, '\\&quot;');
+const NATIVE = {
+  sphere: (s) => `<Sphere radius="${f3(s)}"/>`, ellipsoid: (s) => `<Sphere radius="${f3(s)}"/>`,
+  cone: (s) => `<Cone bottomRadius="${f3(s)}" height="${f3(s * 2)}"/>`, cylinder: (s) => `<Cylinder radius="${f3(s)}" height="${f3(s * 2)}"/>`,
+  box: (s) => `<Box size="${f3(s * 2)} ${f3(s * 2)} ${f3(s * 2)}"/>`,
+};
+const SHAPE_LABEL = { stairs: 'staircase', torusknot: 'torus knot', spiralstairs: 'spiral staircase', cinquefoil: 'cinquefoil knot', mobius: 'möbius strip', klein: 'klein bottle', pseudosphere: 'pseudosphere' };
+const shapeLabel = (s) => SHAPE_LABEL[s] || s;
+const pluralOf = (w) => (/(x|s|z|ch|sh)$/.test(w) ? w + 'es' : w + 's');
+
+const pointStr = (pts) => pts.map((p) => `${f3(p[0])} ${f3(p[1])} ${f3(p[2])}`).join(' ');
+function edgesOf(m) {
+  const seen = new Set(), out = [];
+  for (const f of m.faces) for (let k = 0; k < f.length; k++) {
+    const a = f[k], b = f[(k + 1) % f.length], key = a < b ? a + '_' + b : b + '_' + a;
+    if (!seen.has(key)) { seen.add(key); out.push([a, b]); }
+  }
+  return out;
+}
+const lineSet = (pts, edges) => `<IndexedLineSet coordIndex="${edges.map((e) => e.join(' ') + ' -1').join(' ')}"><Coordinate point="${pointStr(pts)}"/></IndexedLineSet>`;
+
+function normObj(o) {
+  if (!o.anims) o.anims = o.anim ? [{ type: o.anim, speed: 1, dir: 1 }] : [];
+  if (!o.stretch) o.stretch = [1, 1, 1];
+  if (!o.finish) o.finish = 'default';
+  if (o.wire === undefined) o.wire = false;
+  if (o.texture === undefined) o.texture = null;
+  return o;
+}
+
+function shapeBody(o, i) {
+  const s = o.size;
+  if (o.shape === 'text') {
+    const label = xmlEsc(o.text || 'text'), c = o.color;
+    return `      <Billboard axisOfRotation="0 0 0"><Shape><Text string='"${label}"'><FontStyle size="${f3(s * 1.2)}" justify='"MIDDLE" "MIDDLE"' family='"SANS"'/></Text>` +
+      `<Appearance><Material DEF="mat_${i}" diffuseColor="${c.map(f3).join(' ')}" emissiveColor="${c.map((v) => f3(v * 0.55)).join(' ')}" transparency="${(o.transparency || 0).toFixed(2)}"/></Appearance></Shape></Billboard>\n`;
+  }
+  if (o.shape === 'tesseract') {
+    const l = linesOf('tesseract', s);
+    return `      <Shape>${lineSet(l.pts, l.edges)}${appearanceXml({ ...o, wire: true }, i)}</Shape>\n`;
+  }
+  if (o.wire) { const m = meshOf(o.shape, s); return `      <Shape>${lineSet(m.pts, edgesOf(m))}${appearanceXml(o, i)}</Shape>\n`; }
+  if (NATIVE[o.shape]) return `      <Shape>${NATIVE[o.shape](s)}${appearanceXml(o, i)}</Shape>\n`;
+  const m = meshOf(o.shape, s);
+  return `      <Shape><IndexedFaceSet coordIndex="${faceStr(m.faces)}" solid="false" creaseAngle="${m.crease}" normalPerVertex="true"><Coordinate point="${pointStr(m.pts)}"/></IndexedFaceSet>${appearanceXml(o, i)}</Shape>\n`;
+}
+
+/* ── Animation ─────────────────────────────────────────────────────────────── */
+
+const ANIMS = {
+  spin: { g: 'rot', t: 3, w: ['spin', 'spinning', 'rotate', 'rotating', 'revolve', 'revolving', 'turntable', 'animate'] },
+  flip: { g: 'rot', t: 2.5, w: ['flip', 'flipping', 'somersault', 'cartwheel', 'roll', 'rolling', 'barrel roll'] },
+  tumble: { g: 'rot', t: 4, w: ['tumble', 'tumbling'] },
+  wobble: { g: 'rot', t: 1.5, w: ['wobble', 'wobbling', 'wiggle', 'wiggling', 'jiggle', 'sway', 'swaying'] },
+  swing: { g: 'rot', t: 2.2, w: ['swing', 'swinging', 'pendulum'] },
+  bounce: { g: 'pos', t: 1.5, w: ['bounce', 'bouncing', 'bob', 'bobbing', 'hop', 'hopping', 'jump', 'jumping', 'oscillate', 'float up and down'] },
+  orbit: { g: 'pos', t: 8, w: ['orbit', 'orbiting', 'circle around', 'circling', 'go around', 'revolve around'] },
+  float: { g: 'pos', t: 4, w: ['hover', 'hovering', 'levitate', 'levitating', 'drift', 'drifting'] },
+  shake: { g: 'pos', t: 0.5, w: ['shake', 'shaking', 'vibrate', 'vibrating', 'shiver', 'jitter', 'tremble', 'rumble'] },
+  pulse: { g: 'scl', t: 2, w: ['pulse', 'pulsing', 'breathe', 'breathing', 'throb', 'heartbeat', 'beat', 'beating', 'grow and shrink', 'inflate and deflate'] },
+  colorcycle: { g: 'col', t: 6, w: ['color cycle', 'colour cycle', 'cycle colors', 'cycle colours', 'color cycling', 'colour cycling', 'hue cycle', 'hue shift', 'color shift', 'shimmer', 'rainbow cycle', 'color change', 'change colors'], x: String.raw`\b(?:cycl\w*|shift\w*|flash\w*|animat\w*)\b[^.]{0,24}\bcolou?rs?\b|\bcolou?rs?\s+(?:cycl\w*|shift\w*|flash\w*)|\bshimmer\w*` },
+  fade: { g: 'tr', t: 3, w: ['fade', 'fading', 'blink', 'blinking', 'flicker', 'flickering', 'twinkle', 'twinkling'] },
+};
+const ANIM_RES = Object.entries(ANIMS).map(([k, a]) => [k, new RegExp('\\b(?:' + a.w.map(esc).join('|') + ')\\b' + (a.x ? '|' + a.x : ''))]);
+const STOP_RE = /\b(stop|freeze|halt|pause|no animation|still|static|stationary|end animation|cancel animation)\b/;
+
+function parseAnimations(t) {
+  const s = t.replace(/(?:rotat\w*|turn|tilt)\b[^.]{0,24}?-?[\d.]+\s*(?:degrees?|deg|°)|rotat\w*\s+(?:by\s+|to\s+)?-?[\d.]+/g, ' ');
+  const types = ANIM_RES.filter(([, re]) => re.test(s)).map(([k]) => k).filter((k) => !(k === 'flip' && /upside down|inverted|flipped/.test(s)));
+  let speed = 1, dir = 1;
+  if (/\b(very slowly|extremely slowly|super slow|painfully slow)\b/.test(s)) speed = 3;
+  else if (/\b(slowly|slow|gently|lazily|leisurely)\b/.test(s)) speed = 2;
+  else if (/\b(very fast|very quickly|super fast|insanely fast|frantically)\b/.test(s)) speed = 0.25;
+  else if (/\b(fast|quickly|quick|rapidly|rapid|speedily|briskly)\b/.test(s)) speed = 0.5;
+  if (/\b(reverse|reversed|backwards?|counter-?clockwise|anti-?clockwise|opposite)\b/.test(s)) dir = -1;
+  return { types, speed, dir };
+}
+
+function setAnims(o, types, speed, dir) {
+  normObj(o);
+  for (const type of types) {
+    o.anims = o.anims.filter((a) => ANIMS[a.type].g !== ANIMS[type].g);
+    o.anims.push({ type, speed, dir });
+  }
+}
+
+function animationXml(o, i) {
+  let xml = '';
+  const [x, y, z] = o.position, base = [...(o.shape === 'ellipsoid' ? [1, 0.65, 1.45] : [1, 1, 1])].map((v, k) => v * o.stretch[k]);
+  for (const a of o.anims) {
+    const def = ANIMS[a.type], T = def.t * a.speed, id = `${i}_${a.type}`, clk = `clk_${id}`, ip = `ip_${id}`, d = a.dir || 1;
+    const clock = `    <TimeSensor DEF="${clk}" cycleInterval="${T.toFixed(3)}" loop="true"/>\n`;
+    const rt = (to, field) => `    <ROUTE fromNode="${clk}" fromField="fraction_changed" toNode="${ip}" toField="set_fraction"/>\n    <ROUTE fromNode="${ip}" fromField="value_changed" toNode="${to}" toField="${field}"/>\n`;
+    const keys = (n) => Array.from({ length: n }, (_, k) => (k / (n - 1)).toFixed(4)).join(' ');
+    const pos = (arr) => arr.map((p) => `${f3(p[0])} ${f3(p[1])} ${f3(p[2])}`).join('  ');
+    const ori = (ax, angles) => angles.map((an) => `${ax.join(' ')} ${an.toFixed(4)}`).join('  ');
+    let node = '';
+    switch (a.type) {
+      case 'spin': case 'flip': case 'tumble': {
+        const ax = a.type === 'spin' ? [0, 1, 0] : a.type === 'flip' ? [1, 0, 0] : (() => { const L = Math.hypot(1, 1, 0.4); return [1 / L, 1 / L, 0.4 / L]; })();
+        node = `    <OrientationInterpolator DEF="${ip}" key="${keys(5)}" keyValue="${ori(ax, [0, 1, 2, 3, 4].map((k) => d * k * Math.PI / 2))}"/>\n` + rt(`rot_${i}`, 'rotation'); break;
       }
-      if (pts) body = shapeXml(ifs(pts, idxs, crease), m);
+      case 'wobble': node = `    <OrientationInterpolator DEF="${ip}" key="${keys(5)}" keyValue="${ori([0, 0, 1], [0, 0.35, 0, -0.35, 0])}"/>\n` + rt(`rot_${i}`, 'rotation'); break;
+      case 'swing': node = `    <OrientationInterpolator DEF="${ip}" key="${keys(5)}" keyValue="${ori([0, 0, 1], [0, 0.8, 0, -0.8, 0])}"/>\n` + rt(`rot_${i}`, 'rotation'); break;
+      case 'bounce': node = `    <PositionInterpolator DEF="${ip}" key="${keys(5)}" keyValue="${pos([[x, y, z], [x, y + 1.1, z], [x, y + 1.5, z], [x, y + 1.1, z], [x, y, z]])}"/>\n` + rt(`obj_${i}`, 'translation'); break;
+      case 'float': node = `    <PositionInterpolator DEF="${ip}" key="${keys(5)}" keyValue="${pos([[x, y, z], [x, y + 0.3, z], [x, y, z], [x, y - 0.3, z], [x, y, z]])}"/>\n` + rt(`obj_${i}`, 'translation'); break;
+      case 'orbit': {
+        const R = Math.max(Math.hypot(x, z), 2.5), a0 = Math.hypot(x, z) > 0.1 ? Math.atan2(z, x) : 0, n = 16;
+        node = `    <PositionInterpolator DEF="${ip}" key="${keys(n + 1)}" keyValue="${pos(Array.from({ length: n + 1 }, (_, k) => [R * Math.cos(a0 + d * 2 * Math.PI * k / n), y, R * Math.sin(a0 + d * 2 * Math.PI * k / n)]))}"/>\n` + rt(`obj_${i}`, 'translation'); break;
+      }
+      case 'shake': {
+        const r = mulberry32(11 + i), p = Array.from({ length: 9 }, () => [x + (r() - 0.5) * 0.3, y + (r() - 0.5) * 0.3, z + (r() - 0.5) * 0.3]); p[8] = p[0];
+        node = `    <PositionInterpolator DEF="${ip}" key="${keys(9)}" keyValue="${pos(p)}"/>\n` + rt(`obj_${i}`, 'translation'); break;
+      }
+      case 'pulse': {
+        const k = (n) => base.map((v) => f3(v * n)).join(' ');
+        node = `    <PositionInterpolator DEF="${ip}" key="${keys(3)}" keyValue="${k(1)}  ${k(1.5)}  ${k(1)}"/>\n` + rt(`obj_${i}`, 'scale'); break;
+      }
+      case 'colorcycle': {
+        const cols = Array.from({ length: 7 }, (_, k) => hsv((k % 6) / 6, 0.85, 1));
+        node = `    <ColorInterpolator DEF="${ip}" key="${keys(7)}" keyValue="${cols.map((c) => c.map(f3).join(' ')).join('  ')}"/>\n`;
+        node += rt(`mat_${i}`, o.wire ? 'emissiveColor' : 'diffuseColor');
+        if (o.finish === 'glow' && !o.wire) node += `    <ROUTE fromNode="${ip}" fromField="value_changed" toNode="mat_${i}" toField="emissiveColor"/>\n`;
+        break;
+      }
+      case 'fade': node = `    <ScalarInterpolator DEF="${ip}" key="${keys(3)}" keyValue="0 0.85 0"/>\n` + rt(`mat_${i}`, 'transparency'); break;
     }
+    xml += clock + node;
   }
-  return { xml: wrap(body, pos, rot, id), baseScale };
+  return xml;
 }
 
-/* ── Animation, lighting, camera ───────────────────────────────────────────── */
-
-function animationXml(type, id, pos, baseScale) {
-  const clock = `    <TimeSensor DEF="clock_${id}" cycleInterval="`;
-  const route = (from, to, field) =>
-    `    <ROUTE fromNode="${from}_${id}" fromField="${from === 'clock' ? 'fraction_changed' : 'value_changed'}" toNode="${to}_${id}" toField="${field}"/>\n`;
-  const [x, y, z] = pos;
-  if (type === 'spin') {
-    return `${clock}3" loop="true"/>\n` +
-      `    <OrientationInterpolator DEF="spin_${id}" key="0 0.5 1" keyValue="0 1 0 0  0 1 0 3.14159  0 1 0 6.28318"/>\n` +
-      route('clock', 'spin', 'set_fraction') + route('spin', 'obj', 'rotation');
+function objectXml(o, i) {
+  normObj(o);
+  const base = o.shape === 'ellipsoid' ? [1, 0.65, 1.45] : [1, 1, 1], sc = base.map((v, k) => v * o.stretch[k]);
+  const sAttr = sc.some((v) => Math.abs(v - 1) > 1e-6) ? ` scale="${sc.map(f3).join(' ')}"` : '';
+  const rAttr = o.rotation ? ` rotation="${o.rotation[0]} ${o.rotation[1]} ${o.rotation[2]} ${o.rotation[3].toFixed(4)}"` : '';
+  let body = shapeBody(o, i);
+  if (o.anims.some((a) => ANIMS[a.type].g === 'rot')) {
+    const center = o.anims.some((a) => a.type === 'swing') ? ` center="0 ${f3(o.size)} 0"` : '';
+    body = `      <Transform DEF="rot_${i}"${center}>\n${body}      </Transform>\n`;
   }
-  if (type === 'bounce') {
-    // Offsets are applied on top of the object's own position so it doesn't jump to the origin.
-    return `${clock}1.5" loop="true"/>\n` +
-      `    <PositionInterpolator DEF="bounce_${id}" key="0 0.5 1" keyValue="${f3(x)} ${f3(y)} ${f3(z)}  ${f3(x)} ${f3(y + 1.5)} ${f3(z)}  ${f3(x)} ${f3(y)} ${f3(z)}"/>\n` +
-      route('clock', 'bounce', 'set_fraction') + route('bounce', 'obj', 'translation');
-  }
-  if (type === 'pulse') {
-    const [a, b, c] = baseScale;
-    const k = (n) => `${f3(a * n)} ${f3(b * n)} ${f3(c * n)}`;
-    return `${clock}2" loop="true"/>\n` +
-      `    <PositionInterpolator DEF="pulse_${id}" key="0 0.5 1" keyValue="${k(1)}  ${k(1.5)}  ${k(1)}"/>\n` +
-      route('clock', 'pulse', 'set_fraction') + route('pulse', 'obj', 'scale');
-  }
-  return '';
+  return `    <Transform DEF="obj_${i}" translation="${f3(o.position[0])} ${f3(o.position[1])} ${f3(o.position[2])}"${sAttr}${rAttr}>\n${body}    </Transform>\n`;
 }
+
+/* ── Lighting, camera, environment ─────────────────────────────────────────── */
 
 const LIGHT_PRESETS = {
   night:    { sky: [0, 0, 0.05],       lights: [['-0.3 -1 -0.5', 0.3, '0.7 0.7 1.0'], ['0.5 0.5 0', 0.1, '0.9 0.9 1.0']] },
@@ -821,139 +1063,637 @@ const LIGHT_PRESETS = {
   dimmer:   { sky: [0.02, 0.02, 0.04], lights: [['-1 -2 -1', 0.4, '1 1 1'], ['1 1 0.5', 0.2, '0.8 0.8 1']] },
 };
 const DEFAULT_LIGHTS = { sky: [0.08, 0.08, 0.12], lights: [['-1 -2 -1', 1.0, '1 1 1'], ['1 1 0.5', 0.5, '0.8 0.8 1']] };
-
 const VIEWPOINTS = {
-  reset:    '<Viewpoint description="Default" position="0 0 10" orientation="0 1 0 0"/>',
-  top:      '<Viewpoint description="Top" position="0 12 0" orientation="1 0 0 -1.5708"/>',
-  front:    '<Viewpoint description="Front" position="0 0 12" orientation="0 1 0 0"/>',
-  side:     '<Viewpoint description="Side" position="12 0 0" orientation="0 1 0 1.5708"/>',
-  iso:      '<Viewpoint description="Iso" position="7 7 7" orientation="0.577 0.577 0.577 -1.5708"/>',
-  zoom_in:  '<Viewpoint description="Close" position="0 0 5" orientation="0 1 0 0"/>',
+  reset: '<Viewpoint description="Default" position="0 0 10" orientation="0 1 0 0"/>', top: '<Viewpoint description="Top" position="0 12 0" orientation="1 0 0 -1.5708"/>',
+  front: '<Viewpoint description="Front" position="0 0 12" orientation="0 1 0 0"/>', side: '<Viewpoint description="Side" position="12 0 0" orientation="0 1 0 1.5708"/>',
+  iso: '<Viewpoint description="Iso" position="7 7 7" orientation="0.577 0.577 0.577 -1.5708"/>', zoom_in: '<Viewpoint description="Close" position="0 0 5" orientation="0 1 0 0"/>',
   zoom_out: '<Viewpoint description="Wide" position="0 0 20" orientation="0 1 0 0"/>',
 };
-
 const SPOT = '    <SpotLight location="0 5 0" direction="0 -1 0" intensity="1.5" cutOffAngle="0.5" color="1 1 0.9"/>\n';
+const SKY_PRESETS = {
+  sunset: { grad: [[0.1, 0.1, 0.32], [1, 0.45, 0.2]] }, dawn: { grad: [[0.25, 0.35, 0.7], [1, 0.72, 0.45]] },
+  stormy: { grad: [[0.25, 0.27, 0.3], [0.6, 0.62, 0.66]] }, day: { grad: [[0.2, 0.45, 0.95], [0.72, 0.86, 1]] },
+  night: { grad: [[0.005, 0.005, 0.05], [0.06, 0.08, 0.22]], stars: true }, space: { sky: [0, 0, 0.015], stars: true },
+};
+
+function starsXml() {
+  const r = mulberry32(99), pts = [];
+  for (let k = 0; k < 600; k++) { const u = r() * 2 - 1, a = r() * 2 * Math.PI, q = Math.sqrt(1 - u * u); pts.push([90 * q * Math.cos(a), 90 * u, 90 * q * Math.sin(a)]); }
+  return `    <Shape><PointSet><Coordinate point="${pointStr(pts)}"/></PointSet><Appearance><Material diffuseColor="0 0 0" emissiveColor="1 1 1"/></Appearance></Shape>\n`;
+}
 
 /* ── Scene model ───────────────────────────────────────────────────────────── */
 
 class Scene {
-  constructor() { this.reset(); }
+  constructor() {
+    Object.defineProperty(this, '_undo', { value: [], writable: true, enumerable: false });
+    Object.defineProperty(this, '_redo', { value: [], writable: true, enumerable: false });
+    this.reset();
+  }
 
   reset() {
     this.sky = [...DEFAULT_LIGHTS.sky];
+    this.skyGrad = null;
     this.lights = DEFAULT_LIGHTS.lights.map((l) => [...l]);
     this.viewpoint = null;
     this.spots = 0;
-    this.objects = [];   // { shape, colorName, color, position, size, rotation, transparency, baseScale, xml, anim }
+    this.objects = [];
+    this.ground = null;
+    this.fog = null;
+    this.stars = false;
+    this.axes = false;
+    this.shadows = false;
     this.lightsDirty = false;
-    this.raw = null;     // imported archive scene (X3D XML) that new content is appended to
+    this.raw = null;
+  }
+
+  pushUndo(snapshotJson) { this._undo.push(snapshotJson); if (this._undo.length > 60) this._undo.shift(); this._redo.length = 0; }
+  checkpoint() { this.pushUndo(JSON.stringify(this)); }
+  undo() { if (!this._undo.length) return false; this._redo.push(JSON.stringify(this)); this.restore(JSON.parse(this._undo.pop())); return true; }
+  redo() { if (!this._redo.length) return false; this._undo.push(JSON.stringify(this)); this.restore(JSON.parse(this._redo.pop())); return true; }
+
+  groundY() {
+    if (!this.objects.length) return -1;
+    return Math.min(-0.5, Math.min(...this.objects.map((o) => o.position[1] - o.size * (o.stretch ? o.stretch[1] : 1) * 1.02))) - 0.02;
   }
 
   lightsXml() {
-    return this.lights.map(([d, i, c]) => `    <DirectionalLight direction="${d}" intensity="${i.toFixed(2)}" color="${c}"/>\n`).join('');
+    return this.lights.map(([d, i, c], k) => `    <DirectionalLight direction="${d}" intensity="${i.toFixed(2)}" color="${c}"${k === 0 && this.shadows ? ' shadows="true" shadowIntensity="0.75" shadowMapSize="2048"' : ''}/>\n`).join('');
   }
 
-  /** Everything we generate, as a fragment that goes inside <Scene>. */
-  contentXml() {
+  backgroundXml() {
+    if (this.skyGrad) return `    <Background skyColor="${this.skyGrad[0].map(f3).join(' ')}, ${this.skyGrad[1].map(f3).join(' ')}" skyAngle="1.5708"/>\n`;
+    return `    <Background skyColor="${this.sky.map((n) => n.toFixed(2)).join(' ')}"/>\n`;
+  }
+
+  environmentXml() {
     let out = '';
-    this.objects.forEach((o, i) => {
-      out += o.xml;
-      if (o.anim) out += animationXml(o.anim, i, o.position, o.baseScale);
-    });
-    out += SPOT.repeat(this.spots);
+    if (this.fog) out += `    <Fog color="${this.fog.color.map(f3).join(' ')}" visibilityRange="${this.fog.range}" fogType="LINEAR"/>\n`;
+    if (this.stars) out += starsXml();
+    if (this.ground) {
+      const g = this.ground, y = this.groundY();
+      if (g.kind === 'grid') {
+        const pts = [], edges = [], N = 20, step = 2;
+        for (let k = -N; k <= N; k++) { const b = pts.length; pts.push([k * step, 0, -N * step], [k * step, 0, N * step], [-N * step, 0, k * step], [N * step, 0, k * step]); edges.push([b, b + 1], [b + 2, b + 3]); }
+        out += `    <Transform translation="0 ${f3(y)} 0"><Shape>${lineSet(pts, edges)}<Appearance><Material diffuseColor="0 0 0" emissiveColor="${g.color.map(f3).join(' ')}"/></Appearance></Shape></Transform>\n`;
+      } else {
+        const tex = g.kind === 'checker' ? `<PixelTexture image="2 2 3 0x${rgbHex(g.color)} 0x${rgbHex(mix(g.color, [1, 1, 1], 0.7))} 0x${rgbHex(mix(g.color, [1, 1, 1], 0.7))} 0x${rgbHex(g.color)}"/><TextureTransform scale="20 20"/>` : '';
+        const emi = g.kind === 'lava' ? g.color.map((v) => f3(v * 0.8)).join(' ') : '0 0 0';
+        out += `    <Transform translation="0 ${f3(y - 0.03)} 0"><Shape><Box size="120 0.06 120"/><Appearance><Material diffuseColor="${(tex ? [1, 1, 1] : g.color).map(f3).join(' ')}" emissiveColor="${emi}" specularColor="${g.kind === 'water' ? '0.8 0.8 0.9' : '0.05 0.05 0.05'}" shininess="${g.kind === 'water' ? 0.9 : 0.1}" transparency="${(g.transparency || 0).toFixed(2)}"/>${tex}</Appearance></Shape></Transform>\n`;
+      }
+    }
+    if (this.axes) {
+      [['3 0 0', '1 0.25 0.25'], ['0 3 0', '0.3 1 0.3'], ['0 0 3', '0.35 0.5 1']].forEach(([to, c]) => {
+        out += `    <Shape><IndexedLineSet coordIndex="0 1 -1"><Coordinate point="0 0 0 ${to}"/></IndexedLineSet><Appearance><Material diffuseColor="0 0 0" emissiveColor="${c}"/></Appearance></Shape>\n`;
+      });
+    }
     return out;
+  }
+
+  contentXml() {
+    return this.objects.map((o, i) => objectXml(o, i) + animationXml(o, i)).join('') + SPOT.repeat(this.spots);
   }
 
   toX3D() {
     if (this.raw) {
-      const extras = (this.lightsDirty ? this.lightsXml() : '') + (this.viewpoint ? `    ${this.viewpoint}\n` : '') + this.contentXml();
+      const extras = (this.lightsDirty ? this.lightsXml() : '') + (this.viewpoint ? `    ${this.viewpoint}\n` : '') + this.environmentXml() + this.contentXml();
       return this.raw.includes('</Scene>') ? this.raw.replace('</Scene>', extras + '  </Scene>') : this.raw;
     }
-    const sky = this.sky.map((n) => n.toFixed(2)).join(' ');
     return `<?xml version="1.0" encoding="UTF-8"?>
 <X3D profile="Immersive" version="3.3">
   <Scene>
-    <Background skyColor="${sky}"/>
-    <NavigationInfo type="EXAMINE ANY"/>
-${this.lightsXml()}${this.viewpoint ? `    ${this.viewpoint}\n` : ''}${this.contentXml()}  </Scene>
+${this.backgroundXml()}    <NavigationInfo type='"EXAMINE" "ANY"'/>
+${this.lightsXml()}    ${this.viewpoint || VIEWPOINTS.reset}
+${this.environmentXml()}${this.contentXml()}  </Scene>
 </X3D>
 `;
   }
 
   snapshot() { return JSON.parse(JSON.stringify(this)); }
-  restore(s) { this.reset(); Object.assign(this, s); }
+  restore(s) { this.reset(); Object.assign(this, s); this.objects.forEach(normObj); }
+}
+
+/* ── Shape / target lookup ─────────────────────────────────────────────────── */
+
+const SA = DATA.SHAPE_ALIASES;
+const SHAPE_KEYS = Object.keys(SA).sort((a, b) => b.length - a.length);
+const SHAPE_RE_SRC = `\\b(${SHAPE_KEYS.map(esc).join('|')})(?:s|es)?\\b`;
+const SINGULAR_S = new Set(['stairs', 'steps', 'hills', 'dunes', 'words', 'plus', 'cross', 'ripples']);
+
+function findShapes(t) {
+  const out = [];
+  for (const m of t.matchAll(new RegExp(SHAPE_RE_SRC, 'g'))) {
+    const word = m[0], base = m[1];
+    const plural = !SINGULAR_S.has(word) && !SINGULAR_S.has(base) && (word !== base || (/[^s]s$/.test(word) && !/us$/.test(word)) || /(ices|hedra)$/.test(word));
+    out.push({ i: m.index, j: m.index + word.length, shape: SA[base], word, plural });
+  }
+  return out;
+}
+
+const colorDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const colorMatch = (o, sp) => o.colorName === sp.name || colorDist(o.color, sp.rgb) < 0.16;
+const ORD = { first: 1, '1st': 1, second: 2, '2nd': 2, third: 3, '3rd': 3, fourth: 4, '4th': 4, fifth: 5, '5th': 5, sixth: 6, '6th': 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
+const ALL_RE = /\b(everything|all of them|them all|all (?:the |of the |my )?(?:objects?|shapes?|things?|items?|stuff|models?)|every (?:object|shape|thing|item)|each (?:object|shape|thing|item)|all (?:the |of the )?(?:\w+\s+)?(?:ones|them))\b/;
+
+/** Which existing objects does this text refer to? */
+function resolveTargets(t, scene) {
+  const objs = scene.objects;
+  if (!objs.length) return { idx: [], empty: true };
+  const spans = findColors(t), shapes = findShapes(t), sh = shapes[0];
+  let cand = objs.map((_, i) => i), filtered = false, plural = false, filterSpan = null;
+  if (sh) { cand = cand.filter((i) => objs[i].shape === sh.shape); filtered = true; plural = sh.plural; }
+  for (const sp of spans) {
+    const after = t.slice(sp.j);
+    const adjShape = sh && sh.i >= sp.j && /^\s*(?:[a-z-]+\s+)?$/.test(t.slice(sp.j, sh.i));
+    const adjOnes = /^\s+(?:one|ones|things?|objects?|shapes?|items?)\b/.test(after);
+    if (adjShape || adjOnes) { filterSpan = sp; if (adjOnes && /^\s+(ones|things|objects|shapes|items)/.test(after)) plural = true; break; }
+  }
+  if (filterSpan) { cand = cand.filter((i) => colorMatch(objs[i], filterSpan)); filtered = true; }
+  const res = (idx, forceMissing = false) => ({ idx, filtered, filterSpan, missing: forceMissing || (filtered && !cand.length), desc: describeFilter(sh, filterSpan) });
+  const abs = t.match(/#(\d+)|\b(?:object|number|no\.?)\s*(\d+)\b/);
+  if (abs) { const n = parseInt(abs[1] || abs[2], 10) - 1; return res(n >= 0 && n < objs.length ? [n] : [], !(n >= 0 && n < objs.length)); }
+  const om = t.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th)\b/);
+  if (om) { const k = ORD[om[1]] - 1; return res(cand[k] !== undefined ? [cand[k]] : [], cand[k] === undefined); }
+  if (/\b(last|previous|latest|newest|recent)\b/.test(t)) return res(cand.length ? [cand[cand.length - 1]] : []);
+  if (/\boldest\b/.test(t)) return res(cand.length ? [cand[0]] : []);
+  if (ALL_RE.test(t) || plural || /\b(them|those|these)\b/.test(t)) return res(cand);
+  if (filtered) return res(cand.length ? [cand[cand.length - 1]] : []);
+  if (/\b(it|that|this)\b/.test(t)) return res([objs.length - 1]);
+  return res([]);
+}
+const describeFilter = (sh, sp) => [sp && sp.name, sh && shapeLabel(sh.shape)].filter(Boolean).join(' ') || 'object';
+
+/* ── Relative placement ("next to the red sphere") ─────────────────────────── */
+
+const REL_RE = /\b(next to|beside|alongside|adjacent to|to the left of|to the right of|left of|right of|on top of|atop|above|over|below|underneath|under|beneath|behind|in front of|near|close to)\s+(?:the\s+|that\s+|this\s+|my\s+)?/;
+
+function parseRelation(t, scene) {
+  const m = REL_RE.exec(t);
+  if (!m || !scene.objects.length) return null;
+  const rest = t.slice(m.index + m[0].length), tg = resolveTargets(rest, scene);
+  if (!tg.idx.length) return null;
+  const p = m[1];
+  const rel = /left/.test(p) ? 'left' : /right/.test(p) ? 'right' : /(on top|atop|above|over)/.test(p) ? 'above' : /(below|underneath|under|beneath)/.test(p) ? 'below' : /behind/.test(p) ? 'behind' : /in front/.test(p) ? 'front' : 'beside';
+  return { rel, ref: scene.objects[tg.idx[tg.idx.length - 1]], subject: t.slice(0, m.index), start: m.index };
+}
+
+function relPos(ref, rel, selfSize) {
+  normObj(ref);
+  const g = 0.3, dx = ref.size * ref.stretch[0] * 1.05 + selfSize * 1.05 + g, dy = ref.size * ref.stretch[1] * 1.05 + selfSize * 1.05 + g, dz = ref.size * ref.stretch[2] * 1.05 + selfSize * 1.05 + g;
+  const v = { left: [-dx, 0, 0], right: [dx, 0, 0], beside: [dx, 0, 0], above: [0, dy, 0], below: [0, -dy, 0], behind: [0, 0, -dz], front: [0, 0, dz] }[rel];
+  return ref.position.map((p, k) => p + v[k]);
+}
+
+/* ── Arrangements ──────────────────────────────────────────────────────────── */
+
+const ARRANGEMENTS = [
+  ['spiral', /\b(?:in|into|as|forming|make|making)\s+(?:a|an|the)?\s*(?:flat\s+)?spiral\b|\bspiral\s+(?:of|arrangement|formation|pattern)\b|\bswirl\b|\bvortex\b/],
+  ['helix', /\b(?:in|into|as|forming)\s+(?:a|an|the)?\s*(?:helix|coil|corkscrew)\b|\b(?:helix|coil)\s+(?:of|arrangement|formation)\b/],
+  ['pyramid', /\b(?:in|into|as|forming)\s+(?:a|an|the)?\s*pyramid\b|\bpyramid\s+(?:of|stack|formation|arrangement)\b/],
+  ['wall', /\b(?:in a |into a |as a )?wall\b/],
+  ['tower', /\b(?:stack|stacked|stacking|vertically|vertical line|in a (?:tower|column|pile))\b/],
+  ['wave', /\b(?:wave|wavy|sine wave|undulating|snaking)\b(?!\s+surface)/],
+  ['sphere', /\b(?:in|into|as|forming)\s+(?:a|an|the)?\s*(?:sphere|ball|globe)(?:\s+formation|\s+shape)?\b/],
+  ['cloud', /\b(?:cloud|swarm|cluster|clump|bunch|galaxy)\b/],
+  ['diagonal', /\bdiagonal(?:ly)?\b|\bascending\b|\bdescending\b/],
+  ['zigzag', /\bzig-?zag\b/],
+  ['arc', /\bin an?\s+(?:arc|semicircle|half[- ]circle)\b|\barc of\b/],
+  ['circle', /\b(?:in a circle|circle of|circle|circular|in a ring|ring formation|around|round)\b/],
+  ['grid', /\b(?:grid|matrix|formation|array|lattice|rows and columns)\b/],
+  ['random', /\b(?:random|randomly|scattered|scatter|spread|everywhere|sprinkled|strewn)\b/],
+  ['row', /\b(?:in a row|row|in a line|line|lined up|horizontal|side by side)\b/],
+];
+function parseArrangement(t) {
+  for (const [name, re] of ARRANGEMENTS) { const m = re.exec(t); if (m) return { name, i: m.index, j: m.index + m[0].length }; }
+  return { name: 'row', i: -1, j: -1 };
+}
+
+function multiPositions(count, arr, base, size) {
+  const [x0, y0, z0] = base, sp = size * 2.5, out = [], rnd = mulberry32(42), n = count, mid = (n - 1) / 2;
+  switch (arr) {
+    case 'circle': { const R = Math.max((sp * n) / (2 * Math.PI), sp); for (let i = 0; i < n; i++) { const a = (2 * Math.PI * i) / n; out.push([x0 + R * Math.cos(a), y0, z0 + R * Math.sin(a)]); } break; }
+    case 'grid': { const cols = Math.ceil(Math.sqrt(n)); for (let i = 0; i < n; i++) out.push([x0 + (i % cols) * sp - ((cols - 1) * sp) / 2, y0, z0 + Math.floor(i / cols) * sp]); break; }
+    case 'random': for (let i = 0; i < n; i++) out.push([x0 + (rnd() * 8 - 4), y0 + (rnd() * 3 - 1), z0 + (rnd() * 4 - 2)]); break;
+    case 'spiral': for (let i = 0; i < n; i++) { const a = i * 2.39996, r = sp * 0.55 * Math.sqrt(i + 0.5); out.push([x0 + r * Math.cos(a), y0, z0 + r * Math.sin(a)]); } break;
+    case 'helix': { const R = Math.max(sp * 0.9, 1.2); for (let i = 0; i < n; i++) { const a = (i * 2 * Math.PI) / 7; out.push([x0 + R * Math.cos(a), y0 + (i - mid) * size * 0.55, z0 + R * Math.sin(a)]); } break; }
+    case 'pyramid': {
+      let k = 1; while ((k * (k + 1)) / 2 < n) k++;
+      let placed = 0;
+      for (let r = 0; r < k && placed < n; r++) { const m = k - r; for (let c = 0; c < m && placed < n; c++, placed++) out.push([x0 + (c - (m - 1) / 2) * size * 2.1, y0 + r * size * 1.8, z0]); }
+      break;
+    }
+    case 'wall': { const cols = Math.max(2, Math.ceil(Math.sqrt(n * 1.6))); for (let i = 0; i < n; i++) out.push([x0 + ((i % cols) - (cols - 1) / 2) * size * 2.05, y0 + Math.floor(i / cols) * size * 2.05, z0]); break; }
+    case 'tower': for (let i = 0; i < n; i++) out.push([x0, y0 + i * size * 2.05, z0]); break;
+    case 'wave': for (let i = 0; i < n; i++) out.push([x0 + (i - mid) * sp * 0.8, y0 + Math.sin(i * 0.8) * size * 1.6, z0]); break;
+    case 'sphere': { const R = Math.max(sp * Math.sqrt(n) * 0.45, sp); for (let i = 0; i < n; i++) { const y = 1 - (2 * (i + 0.5)) / n, r = Math.sqrt(1 - y * y), a = i * 2.39996; out.push([x0 + R * r * Math.cos(a), y0 + R * y, z0 + R * r * Math.sin(a)]); } break; }
+    case 'cloud': { const R = sp * Math.cbrt(n) * 1.1; for (let i = 0; i < n; i++) { const u = rnd() * 2 - 1, a = rnd() * 2 * Math.PI, q = Math.sqrt(1 - u * u), r = R * Math.cbrt(rnd()); out.push([x0 + r * q * Math.cos(a), y0 + r * u, z0 + r * q * Math.sin(a)]); } break; }
+    case 'diagonal': for (let i = 0; i < n; i++) out.push([x0 + (i - mid) * sp, y0 + (i - mid) * sp * 0.6, z0]); break;
+    case 'zigzag': for (let i = 0; i < n; i++) out.push([x0 + (i - mid) * sp * 0.8, y0, z0 + (i % 2 ? 1 : -1) * sp * 0.5]); break;
+    case 'arc': { const R = Math.max((sp * n) / Math.PI, sp); for (let i = 0; i < n; i++) { const a = Math.PI - (Math.PI * i) / Math.max(1, n - 1); out.push([x0 + R * Math.cos(a), y0 + R * Math.sin(a), z0]); } break; }
+    default: for (let i = 0; i < n; i++) out.push([x0 + (i - mid) * sp, y0, z0]);
+  }
+  return out;
+}
+
+/* ── Environment commands ──────────────────────────────────────────────────── */
+
+const NEG_RE = /\b(no|remove|delete|hide|without|clear|turn off|disable|get rid of|stop|kill|off)\b/;
+
+function parseEnv(t, scene) {
+  const neg = NEG_RE.test(t), spans = findColors(t);
+  if (/\b(reset|clear|remove|no)\s+(?:the\s+|all\s+)?(?:environment|scenery|backdrop|surroundings)\b/.test(t)) return { op: 'reset' };
+  if (/\bshadows?\b/.test(t)) return { op: 'shadows', on: !neg || /\b(on|enable)\b/.test(t) };
+  if (/\b(axes|axis helper|coordinate (?:frame|axes)|xyz helper)\b/.test(t)) return { op: 'axes', on: !neg };
+  if (/\b(fog|foggy|mist|misty|haze|hazy|smog)\b/.test(t)) {
+    if (neg) return { op: 'fog', fog: null };
+    const range = /\b(dense|thick|heavy|deep)\b/.test(t) ? 9 : /\b(light|thin|slight|faint|subtle)\b/.test(t) ? 45 : 22;
+    return { op: 'fog', fog: { color: spans.length ? spans[0].rgb : [0.72, 0.74, 0.8], range } };
+  }
+  if (neg && /\b(stars?|starfield)\b/.test(t)) return { op: 'sky', stars: false };
+  if (/\b(sky|background|backdrop|horizon|starry|starfield|galaxy|stars? (?:in|on) the (?:sky|background))\b|\b(?:outer|deep) space\b/.test(t)) {
+    if (neg && /\bstars?\b|\bstarfield\b/.test(t)) return { op: 'sky', stars: false };
+    if (neg || /\b(default|normal|reset)\b/.test(t)) return { op: 'sky', sky: [...DEFAULT_LIGHTS.sky], grad: null, stars: false };
+    const grad = /\bgradient\b/.test(t) && spans.length >= 2 ? [spans[0].rgb, spans[1].rgb] : null;
+    if (grad) return { op: 'sky', grad };
+    for (const key of ['sunset', 'dusk', 'dawn', 'sunrise', 'stormy', 'cloudy', 'overcast', 'night', 'space', 'starry', 'starfield', 'galaxy', 'day']) {
+      if (new RegExp('\\b' + key + '\\b').test(t)) {
+        const p = SKY_PRESETS[{ dusk: 'sunset', sunrise: 'dawn', cloudy: 'stormy', overcast: 'stormy', starry: 'space', starfield: 'space', galaxy: 'space' }[key] || key];
+        return { op: 'sky', grad: p.grad || null, sky: p.sky, stars: !!p.stars };
+      }
+    }
+    if (/\bstars?\b/.test(t)) return { op: 'sky', stars: true };
+    if (spans.length) return { op: 'sky', sky: spans[0].rgb.map((v) => v * 0.9), grad: null };
+    if (/\b(clear|blue)\s+sky\b/.test(t)) return { op: 'sky', grad: SKY_PRESETS.day.grad };
+  }
+  const gm = t.match(/\b(ground|floor|grass|lawn|water|ocean|sea|lake|pool|desert|lava|snowfield|carpet)\b/);
+  if (gm) {
+    if (neg) return { op: 'ground', ground: null };
+    const w = gm[1];
+    let g;
+    if (/\b(grid|wireframe|tron|blueprint)\b/.test(t)) g = { kind: 'grid', color: spans.length ? spans[0].rgb : [0.25, 0.55, 0.9] };
+    else if (/\b(water|ocean|sea|lake|pool)\b/.test(w)) g = { kind: 'water', color: spans.length ? spans[0].rgb : [0.08, 0.3, 0.6], transparency: 0.3 };
+    else if (/\b(grass|lawn)\b/.test(w)) g = { kind: 'plane', color: spans.length ? spans[0].rgb : [0.18, 0.5, 0.18] };
+    else if (w === 'desert') g = { kind: 'plane', color: [0.82, 0.7, 0.46] };
+    else if (w === 'lava') g = { kind: 'lava', color: [0.95, 0.25, 0.02] };
+    else if (w === 'snowfield') g = { kind: 'plane', color: [0.95, 0.97, 1] };
+    else if (w === 'carpet') g = { kind: 'plane', color: spans.length ? spans[0].rgb : [0.6, 0.1, 0.12] };
+    else g = { kind: /\b(checker|checkered|chequered|tiled|tile|chessboard)\b/.test(t) ? 'checker' : 'plane', color: spans.length ? spans[0].rgb : [0.3, 0.32, 0.37] };
+    return { op: 'ground', ground: g };
+  }
+  return null;
+}
+
+function applyEnv(scene, e) {
+  switch (e.op) {
+    case 'reset': scene.ground = null; scene.fog = null; scene.stars = false; scene.axes = false; scene.shadows = false; scene.skyGrad = null; scene.sky = [...DEFAULT_LIGHTS.sky]; return 'Environment reset.';
+    case 'shadows': scene.shadows = e.on; return e.on ? 'Shadows on (they show best with a ground or objects close together).' : 'Shadows off.';
+    case 'axes': scene.axes = e.on; return e.on ? 'Axes shown (red x, green y, blue z).' : 'Axes hidden.';
+    case 'fog': scene.fog = e.fog; return e.fog ? `Fog added (visibility ${e.fog.range}).` : 'Fog removed.';
+    case 'ground': scene.ground = e.ground; return e.ground ? `Added ${e.ground.kind === 'plane' ? 'ground' : e.ground.kind + ' ground'}.` : 'Ground removed.';
+    case 'sky':
+      if (e.grad !== undefined) { scene.skyGrad = e.grad; }
+      if (e.sky) { scene.sky = [...e.sky]; scene.skyGrad = e.grad || null; }
+      if (e.stars !== undefined) scene.stars = e.stars;
+      return 'Sky updated.';
+  }
+}
+
+/* ── Describing objects ────────────────────────────────────────────────────── */
+
+function describe(o) { return `${o.colorName} ${shapeLabel(o.shape)}`; }
+function details(o) {
+  normObj(o);
+  const d = [];
+  if (o.finish !== 'default') d.push(o.finish);
+  if (o.texture) d.push(o.texture);
+  if (o.wire) d.push('wireframe');
+  if (o.transparency > 0) d.push('transparent');
+  if (o.anims.length) d.push(o.anims.map((a) => a.type).join('+'));
+  if (o.shape === 'text' && o.text) d.push(`"${o.text}"`);
+  return d.length ? ` (${d.join(', ')})` : '';
+}
+
+/* ── Editing existing objects ──────────────────────────────────────────────── */
+
+const EDIT_RE = /\b(make|turn|change|paint|colou?r|recolou?r|dye|tint|move|shift|nudge|push|slide|raise|lift|lower|sink|resize|scale|grow|shrink|enlarge|expand|rotate|tilt|flip|delete|remove|erase|destroy|duplicate|clone|copy|stretch|squash|flatten|set|give|apply|swap|replace|morph|convert|transform|spin|bounce|pulse|wobble|orbit|shake|swing|tumble|hover|fade|blink|glow|stop|freeze|put|place|bring|send|align|center|centre|hide|rename|say|speed|slow|bigger|smaller|taller|shorter|wider|thinner|faster|slower|metallic|shiny|matte|transparent|wireframe|textured|striped|checkered|spotted|animate|float|drift|jump|hop|roll|shimmer|cycle|trash|kill|eliminate)\b/;
+const REF_RE = /\b(it|them|that|this|those|these|the|my|all|every|each|everything|first|second|third|fourth|fifth|sixth|last|previous|latest|newest|oldest)\b|#\d+|\bobject\s+\d+\b/;
+const INDEF_RE = /\b(?:make|create|build|put|place|drop|bring|give me|show me)\s+(?:me\s+)?(?:a|an|some|\d+|two|three|four|five|six|seven|eight|nine|ten|twelve|dozen)\b/;
+
+function wantsEdit(t, scene) {
+  if (!scene.objects.length) return false;
+  if (/\b(add|spawn|summon|generate|insert|another|new)\b/.test(t)) return false;
+  if (INDEF_RE.test(t)) return false;
+  return EDIT_RE.test(t) && REF_RE.test(t);
+}
+
+const DIRS = { up: [0, 1, 0], upward: [0, 1, 0], upwards: [0, 1, 0], higher: [0, 1, 0], down: [0, -1, 0], downward: [0, -1, 0], downwards: [0, -1, 0], lower: [0, -1, 0], left: [-1, 0, 0], leftward: [-1, 0, 0], leftwards: [-1, 0, 0], right: [1, 0, 0], rightward: [1, 0, 0], rightwards: [1, 0, 0], forward: [0, 0, 1], forwards: [0, 0, 1], closer: [0, 0, 1], nearer: [0, 0, 1], back: [0, 0, -1], backward: [0, 0, -1], backwards: [0, 0, -1], away: [0, 0, -1] };
+const POS_KEYS = Object.keys(DATA.POSITIONS).sort((a, b) => b.length - a.length);
+const ABS_POS_RE = new RegExp(`\\b(?:to|at|on|in|into)\\s+(?:the\\s+)?(${POS_KEYS.map(esc).join('|')})\\b`);
+const MOVE_VERB_RE = /\b(move|shift|nudge|push|slide|raise|lift|lower|sink|send|bring|put|place|set|position|translate|shove|pull|drag|carry|elevate|drop|go)\b/;
+
+function parseMove(t, rel) {
+  t = t.replace(/\bupside[- ]down\b/g, ' ');
+  if (rel) return { relation: rel };
+  const c = t.match(COORD_RE);
+  if (c) return { abs: [num(c[1]), num(c[2]), num(c[3])] };
+  const a = t.match(ABS_POS_RE);
+  if (a && MOVE_VERB_RE.test(t)) return { abs: [...DATA.POSITIONS[a[1]]] };
+  if (!MOVE_VERB_RE.test(t)) return null;
+  const v = [0, 0, 0];
+  let hit = false;
+  const re = /(?:([\d.]+)\s*(?:units?|steps?|meters?)?\s*)?\b(up(?:wards?)?|down(?:wards?)?|left(?:wards?)?|right(?:wards?)?|forwards?|backwards?|back|closer|nearer|away|higher|lower)\b(?:\s*(?:by\s+)?([\d.]+)\s*(?:units?)?)?/g;
+  for (const m of t.matchAll(re)) {
+    const amt = num(m[1] || m[3] || '1.5') || 1.5, d = DIRS[m[2]];
+    d.forEach((x, k) => { v[k] += x * amt; }); hit = true;
+  }
+  if (!hit) {
+    if (/\b(raise|lift|elevate)\b/.test(t)) { v[1] = 1.5; hit = true; }
+    else if (/\b(sink)\b/.test(t)) { v[1] = -1.5; hit = true; }
+  }
+  return hit ? { delta: v } : null;
+}
+
+function extractText(orig) {
+  const q = orig.match(/(?:text|label|sign|caption|banner|words?|says?|saying|reads?|reading|titled|title|write|writing|spell|spelling)\s*(?::|=)?\s*["“'`]([^"”`]+?)["”'`]/i) || orig.match(/["“]([^"”]+)["”]/);
+  if (q) return q[1].trim();
+  const tail = '(?:\\s+(?:in|at|to|on|above|below|with|colou?r|size|next|and|using|made)\\b.*)?$';
+  const w = orig.match(new RegExp('(?:saying|says|reading|reads|titled|that says|that reads|with the words?|spelling)\\s+(.+?)' + tail, 'i'))
+    || orig.match(new RegExp('\\b(?:text|label|sign|caption|banner|words?|title)\\s*:?\\s+(?!saying|says|reading|reads)(.+?)' + tail, 'i'));
+  return w ? w[1].replace(/^["“'`]|["”'`.]$/g, '').trim() : null;
+}
+
+function cloneObj(o) { return JSON.parse(JSON.stringify(o)); }
+
+function runEdit(scene, t, orig) {
+  const objs = scene.objects;
+  // "turn the cube into a sphere": split at the shape change
+  let body = t, shapeNew = null;
+  const ch = /\b(?:turn|change|morph|convert|transform|swap|replace)\b/.test(t) && /\b(?:into|to be|to a|to an|with a|with an|as a|as an|becomes?)\b/.exec(t);
+  if (ch) { const after = t.slice(ch.index), ss = findShapes(after); if (ss.length) { shapeNew = ss[0].shape; body = t.slice(0, ch.index); } }
+  const neuText = shapeNew ? t.slice(ch.index) : null;
+
+  const rel = shapeNew ? null : parseRelation(t, scene);
+  const subjText = rel ? rel.subject : body;
+  const tg = resolveTargets(subjText, scene);
+  if (tg.empty) return { handled: false };
+  if (!tg.idx.length && !tg.missing) return { handled: false };
+  if (tg.missing) return { handled: true, result: { status: 'info', message: `I couldn't find that ${tg.desc} in the scene.` } };
+
+  const opsText = rel ? rel.subject : (neuText ? body + ' ' + neuText : t);
+  const spansAll = findColors(opsText).filter((sp) => !(tg.filterSpan && sp.i === tg.filterSpan.i && !neuText));
+  const spansNew = neuText ? findColors(neuText) : spansAll;
+  const ops = {}, tags = [];
+  let targets = tg.idx.map((i) => objs[i]);
+
+  if (/\b(delete|remove|erase|destroy|get rid of|take away|trash|kill|eliminate|dispose of)\b/.test(t)) {
+    const drop = new Set(tg.idx);
+    const names = targets.map(describe);
+    scene.objects = objs.filter((_, i) => !drop.has(i));
+    return { handled: true, result: { status: 'success', message: names.length === 1 ? `Removed the ${names[0]}.` : `Removed ${names.length} objects.` } };
+  }
+  const dup = /\b(duplicate|clone|copy|replicate)\b/.test(t);
+
+  // size
+  let m;
+  if ((m = opsText.match(/(?:size|radius|scale)\s+(?:of\s+|to\s+|=\s*)?([\d.]+)/)) && !/\bby\b/.test(opsText.slice(m.index, m.index + 20))) { ops.setSize = clamp(num(m[1]), 0.05, 5); tags.push(`size ${ops.setSize}`); }
+  else if ((m = opsText.match(/\b([\d.]+)\s*(?:x|times)\b/)) || (m = opsText.match(/\bby\s+(?:a\s+factor\s+of\s+)?([\d.]+)\b/))) {
+    const f = num(m[1]); if (f > 0) { ops.mul = /\b(smaller|shrink|reduce|decrease|scale down|shorter)\b/.test(opsText) ? 1 / f : f; tags.push(`×${ops.mul.toFixed(2)}`); }
+  } else if (/\b(twice|double|doubled)\b.*\b(big|large|size|bigger|larger)\b|\bdouble (?:the )?size\b/.test(opsText)) { ops.mul = 2; tags.push('doubled'); }
+  else if (/\bhalf\b.*\b(size|big|small|as)\b|\bhalve\b/.test(opsText)) { ops.mul = 0.5; tags.push('halved'); }
+  else if (/\b(bigger|larger|enlarge|grow|increase|expand|inflate|scale up|blow up|magnify|boost)\b/.test(opsText)) {
+    ops.mul = /\b(much|way|a lot|far|significantly|so much|huge amount)\b/.test(opsText) ? 2 : /\b(a bit|slightly|a little|somewhat|little)\b/.test(opsText) ? 1.15 : 1.4; tags.push('bigger');
+  } else if (/\b(smaller|shrink|reduce|decrease|scale down|diminish|shrunk|minimi[sz]e)\b/.test(opsText)) {
+    ops.mul = 1 / (/\b(much|way|a lot|far|significantly|so much)\b/.test(opsText) ? 2 : /\b(a bit|slightly|a little|somewhat|little)\b/.test(opsText) ? 1.15 : 1.4); tags.push('smaller');
+  } else if (/\b(make|set|turn|change|resize)\b/.test(opsText)) {
+    for (const [word, s] of Object.entries(DATA.SIZES)) if (wordRe(word).test(opsText)) { ops.setSize = s; tags.push(word); break; }
+  }
+  // proportions
+  const st = [1, 1, 1];
+  if (/\b(taller|elongate|elongated|stretch|stretched)\b/.test(opsText)) { st[1] = 1.4; tags.push('taller'); }
+  if (/\b(shorter|squash|squashed|flatten|flattened|flatter|squish|squished)\b/.test(opsText)) { st[1] = 0.7; tags.push('flatter'); }
+  if (/\b(wider|fatter|broader|thicker|plumper)\b/.test(opsText)) { st[0] = st[2] = 1.4; tags.push('wider'); }
+  if (/\b(thinner|narrower|skinnier|slimmer|slender)\b/.test(opsText)) { st[0] = st[2] = 0.7; tags.push('thinner'); }
+  if (st.some((v) => v !== 1)) ops.stretch = st;
+  if (/\b(reset|normal|undo)\s+(?:the\s+)?(?:stretch|proportions)\b|\bregular proportions\b/.test(opsText)) { ops.stretch = 'reset'; tags.push('proportions reset'); }
+
+  // style (finish / texture / transparency / wireframe)
+  const style = parseStyle(opsText, spansNew);
+  // colour
+  const pairTex = style.texture && ['gradient', 'checker', 'stripes', 'dots', 'grid'].includes(style.texture);
+  if (style.forceColor) ops.color = { rgb: style.forceColor, name: opsText.includes('zebra') ? 'zebra' : 'candy' };
+  else if (pairTex && spansNew.length >= 2) { ops.color = { rgb: spansNew[0].rgb, name: spansNew[0].name }; style.color2 = spansNew[1].rgb; }
+  else if (spansNew.length) { const sp = spansNew[spansNew.length - 1]; ops.color = { rgb: sp.rgb, name: sp.name }; }
+  if (ops.color) tags.push(ops.color.name);
+  if (Object.keys(style).length) { ops.style = style; tags.push(...[style.finish, style.texture, style.wire ? 'wireframe' : null, style.transparency > 0 ? 'transparent' : null].filter(Boolean)); }
+
+  // rotation
+  if (/\bstraighten|upright|level it|reset rotation\b/.test(opsText)) { ops.rotation = 'reset'; tags.push('straightened'); }
+  else if (/rotat\w*\b[^.]*?-?[\d.]+\s*(?:degrees?|deg|°)|rotat\w*\s+(?:by\s+|to\s+)?-?[\d.]+|(?:turn|tilt)\b[^.]*?-?[\d.]+\s*(?:degrees?|deg|°)/.test(opsText) || /\b(tilt|tilted|upside down|inverted|diagonal|slanted|lean|leaning|sideways)\b/.test(opsText)) { ops.rotation = parseRotation(opsText); if (ops.rotation) tags.push('rotated'); }
+
+  // animation
+  const an = parseAnimations(opsText);
+  if (STOP_RE.test(opsText) && !/\bnew\b/.test(opsText)) { ops.stopAnims = an.types.length ? an.types : 'all'; tags.push('stopped'); }
+  else if (an.types.length) { ops.anims = an; tags.push(...an.types); }
+  else if (/\b(faster|speed up|quicker)\b/.test(opsText)) { ops.speedMul = 0.6; tags.push('faster'); }
+  else if (/\b(slower|slow down)\b/.test(opsText)) { ops.speedMul = 1.6; tags.push('slower'); }
+
+  // text & shape
+  if (shapeNew) { ops.shape = shapeNew; tags.push(`→ ${shapeLabel(shapeNew)}`); }
+  if (targets.some((o) => o.shape === 'text')) { const tx = extractText(orig); if (tx) { ops.text = tx; tags.push('text'); } }
+
+  // movement
+  const mv = parseMove(opsText, rel && !tg.idx.includes(objs.indexOf(rel.ref)) ? rel : null);
+  if (mv) { ops.move = mv; tags.push(mv.relation ? REL_WORDS[mv.relation.rel] + ' ' + describe(mv.relation.ref) : 'moved'); }
+
+  if (!tags.length && !dup) return { handled: false, noop: true };
+
+  if (dup) {
+    const clones = targets.map(cloneObj);
+    if (!ops.move) clones.forEach((c) => { c.position = [c.position[0] + c.size * 2.4, c.position[1], c.position[2]]; });
+    scene.objects.push(...clones);
+    targets = clones; tags.unshift('duplicated');
+  }
+
+  for (const o of targets) {
+    normObj(o);
+    if (ops.setSize) o.size = ops.setSize;
+    if (ops.mul) o.size = clamp(o.size * ops.mul, 0.05, 8);
+    if (ops.stretch === 'reset') o.stretch = [1, 1, 1]; else if (ops.stretch) o.stretch = o.stretch.map((v, k) => clamp(v * ops.stretch[k], 0.15, 6));
+    if (ops.color) { o.color = [...ops.color.rgb]; o.colorName = ops.color.name; }
+    if (ops.style) {
+      const s = ops.style;
+      if ('finish' in s) o.finish = s.finish;
+      if ('texture' in s) o.texture = s.texture;
+      if ('wire' in s) o.wire = s.wire;
+      if ('transparency' in s) o.transparency = s.transparency;
+      if (s.color2) o.color2 = s.color2;
+      if (s.texScale) o.texScale = s.texScale;
+    }
+    if (ops.rotation === 'reset') o.rotation = null; else if (ops.rotation) o.rotation = ops.rotation;
+    if (ops.shape) { o.shape = ops.shape; if (ops.shape === 'text' && !o.text) o.text = 'text'; }
+    if (ops.text) o.text = ops.text;
+    if (ops.stopAnims === 'all') o.anims = []; else if (ops.stopAnims) o.anims = o.anims.filter((a) => !ops.stopAnims.includes(a.type));
+    if (ops.anims) setAnims(o, ops.anims.types, ops.anims.speed, ops.anims.dir);
+    if (ops.speedMul) o.anims.forEach((a) => { a.speed = clamp(a.speed * ops.speedMul, 0.1, 6); });
+    if (ops.move) {
+      if (ops.move.abs) o.position = [...ops.move.abs];
+      else if (ops.move.delta) o.position = o.position.map((p, k) => p + ops.move.delta[k]);
+      else if (ops.move.relation) o.position = relPos(ops.move.relation.ref, ops.move.relation.rel, o.size);
+    }
+  }
+  const names = targets.length === 1 ? `the ${describe(targets[0])}` : `${targets.length} objects`;
+  return { handled: true, result: { status: 'success', message: `${dup ? 'Duplicated' : 'Updated'} ${names}${dup ? '' : ': ' + [...new Set(tags)].join(', ')}.` } };
+}
+
+/* ── Adding objects ────────────────────────────────────────────────────────── */
+
+const REL_WORDS = { left: 'left of', right: 'right of', above: 'above', below: 'below', behind: 'behind', front: 'in front of', beside: 'next to' };
+const BOX_FALLBACK = ['make a scene', 'make something'];
+
+function runAdd(scene, t, orig) {
+  const rel = parseRelation(t, scene);
+  const tS = rel ? rel.subject : t;
+  const count0 = parseCount(tS);
+  const arr = count0 > 1 || /\b(in a|into a|as a|spiral of|pyramid of|row of|circle of)\b/.test(tS) ? parseArrangement(tS) : { name: null, i: -1, j: -1 };
+  const shapes = findShapes(tS);
+  let cands = shapes.filter((s) => !(arr.i >= 0 && s.i >= arr.i && s.j <= arr.j));
+  if (!cands.length && shapes.length && arr.i < 0) cands = shapes;
+  if (!cands.length) {
+    return { status: 'info', message: has(t, BOX_FALLBACK) ? 'Try naming a shape: add a red sphere, a gold gear, a mobius strip…' : "Not sure what shape you want. Try: 'add a red sphere to the left', 'place a gold gear above', or open the Chips tab." };
+  }
+  const sh = cands[0], shape = sh.shape;
+  let text = null, tc = tS;
+  if (shape === 'text') {
+    text = extractText(orig);
+    if (!text) return { status: 'info', message: "What should the text say? Try: add text saying \"hello world\" in gold." };
+    tc = tS.replace(text.toLowerCase(), ' ');
+  }
+  const spans = findColors(tc), ci = parseColorInfo(tc, spans), style = parseStyle(tc, spans);
+  const color = style.forceColor || ci.rgb;
+  const cname = ci.defaulted && style.texture === 'rainbow' ? 'rainbow' : style.forceColor ? (style.color2 && style.color2[0] > 0.8 && style.forceColor[0] > 0.5 ? 'candy' : 'zebra') : ci.name;
+  const size = parseSize(tc), rotation = parseRotation(tc), an = parseAnimations(tc);
+  const position = rel ? relPos(rel.ref, rel.rel, size) : parsePosition(tc);
+  let count = shape === 'text' ? 1 : parseCount(tc);
+  if (count === 1 && sh.plural && shape !== 'text') count = 3;
+  if (scene.objects.length + count > 300) return { status: 'info', message: 'That would make the scene very heavy (300 object limit). Try fewer, or clear some first.' };
+  const arrangement = count > 1 ? (arr.name || 'row') : null;
+  const positions = count > 1 ? multiPositions(count, arrangement, position, size) : [position];
+
+  for (const pos of positions) {
+    const o = { shape, colorName: cname, color: [...color], position: pos, size, rotation, transparency: style.transparency || 0, finish: style.finish || 'default', texture: style.texture || null, wire: !!style.wire, stretch: [1, 1, 1], anims: [] };
+    if (style.color2) o.color2 = style.color2;
+    if (style.texScale) o.texScale = style.texScale;
+    if (text) o.text = text;
+    setAnims(o, an.types, an.speed, an.dir);
+    scene.objects.push(o);
+  }
+  const extras = [style.finish, style.texture, style.wire ? 'wireframe' : null, style.transparency ? 'transparent' : null, ...an.types].filter(Boolean);
+  const what = `${cname} ${count > 1 ? pluralOf(shapeLabel(shape)) : shapeLabel(shape)}${text ? ` "${text}"` : ''}`;
+  const where = count > 1 ? (arrangement === 'random' ? 'scattered' : `in a ${arrangement}`) : `at ${fmtPos(position)}`;
+  return { status: 'success', message: `Added ${count > 1 ? count + ' ' : ''}${what}${extras.length ? ' (' + extras.join(', ') + ')' : ''} ${where}${rel ? ` (${REL_WORDS[rel.rel]} the ${describe(rel.ref)})` : ''}.`.replace(' .', '.') };
 }
 
 /* ── Command runner ────────────────────────────────────────────────────────── */
 
-/** Applies a prompt to the scene. Returns { status, message, async? }. */
-function runCommand(scene, text) {
-  const r = parsePrompt(text);
-  const ok = (message) => ({ status: 'success', message });
-  const info = (message) => ({ status: 'ok', message });
+const ENV_WORD_RE = /\b(fog|mist|haze|sky|ground|floor|shadows?|axes|stars|starfield|background|backdrop|spot ?lights?|lights?|water|grass|environment|camera|view)\b/;
+const HELP = [
+  'ADD: add a shiny gold gear · 5 blue cubes in a spiral · a mobius strip · text saying "hi" · a red cube next to the sphere',
+  'SHAPES: sphere cube cone cylinder torus capsule star arrow heart gear gem crystal pyramid prism dome bowl house tree tower rocket vase table chair stairs arch mobius klein saddle catenoid helicoid terrain shell knots tesseract …',
+  'LOOKS: metallic · glossy · matte · glowing · transparent · wireframe · checkered · striped · dotted · rainbow · gradient from red to blue · pastel/dark/neon + any color',
+  'LAYOUTS: row circle grid scattered spiral helix pyramid wall wave sphere cloud stack arc zigzag',
+  'EDIT: make it bigger/taller/blue/metallic · paint the sphere green · move the cube up 2 · rotate it 45 degrees · turn the cone into a pyramid · duplicate / delete the red cube · undo / redo',
+  'ANIMATE: spin bounce pulse wobble orbit hover shake flip swing tumble fade color-cycle (slowly / fast / backwards) · stop',
+  'WORLD: add ground / grass / water / grid floor · fog · sunset sky · night sky with stars · shadows · axes · day / night / neon · look at the cube · top view',
+].join('\n');
 
-  switch (r.action) {
-    case 'help': return info(r.message);
+function execute(scene, text) {
+  const orig = text.trim(), t = orig.toLowerCase();
+  const ok = (message, extra) => ({ status: 'success', message, ...extra });
+  const info = (message) => ({ status: 'info', message });
+  if (!t || /^(help|\?|commands|what can (?:you|i) (?:do|say)|examples?)$/.test(t)) return info(HELP);
 
-    case 'clear': scene.reset(); return ok('Scene cleared.');
+  if (/\b(undo|take (?:it|that|this) back|revert|step back|go back one)\b/.test(t)) return scene.undo() ? ok('Undone.', { noHistory: true }) : info('Nothing to undo.');
+  if (/\bredo\b/.test(t)) return scene.redo() ? ok('Redone.', { noHistory: true }) : info('Nothing to redo.');
 
-    case 'remove_last': {
-      if (!scene.objects.length) return info('Nothing to remove.');
-      const removed = scene.objects.pop();
-      return ok(`Removed last shape (${removed.shape}).`);
+  const shapesInText = findShapes(t);
+  if (has(t, DATA.CLEAR_PHRASES) && !shapesInText.length && !ENV_WORD_RE.test(t) && !/\b(first|second|third|last|it|that|this)\b/.test(t)) { scene.reset(); return ok('Scene cleared.'); }
+
+  const arch = t.match(new RegExp('\\b(load|fetch|import|open)\\b.*\\b(' + Object.keys(DATA.ARCHIVE_EXAMPLES).join('|') + ')\\b'));
+  if (arch) return { status: 'pending', archiveKey: arch[2] };
+
+  for (const [view, phrases] of [['reset', DATA.CAM_RESET], ['top', DATA.CAM_TOP], ['front', DATA.CAM_FRONT], ['side', DATA.CAM_SIDE], ['iso', DATA.CAM_ISO], ['zoom_in', DATA.CAM_ZOOM_IN], ['zoom_out', DATA.CAM_ZOOM_OUT]]) {
+    if (has(t, phrases)) { scene.viewpoint = VIEWPOINTS[view]; return ok(`Camera set to ${view.replace('_', ' ')} view.`); }
+  }
+  const la = t.match(/\b(?:look at|focus on|focus|zoom to|zoom on|zoom into|center on|centre on|fly to|frame)\s+(?:the\s+)?(.+)$/);
+  if (la && scene.objects.length) {
+    const tg = resolveTargets(la[1], scene);
+    if (tg.idx.length) { const o = scene.objects[tg.idx[tg.idx.length - 1]], d = 4 + o.size * 3; scene.viewpoint = `<Viewpoint description="Focus" position="${f3(o.position[0])} ${f3(o.position[1])} ${f3(o.position[2] + d)}" orientation="0 1 0 0"/>`; return ok(`Camera focused on the ${describe(o)}.`); }
+  }
+
+  const skyWords = (/\b(sky|background|backdrop|starfield|galaxy)\b/.test(t) || (scene.stars && NEG_RE.test(t))) && shapesInText.every((s) => s.shape === 'star');
+  if (!shapesInText.length || skyWords) { const env = parseEnv(t, scene); if (env) return ok(applyEnv(scene, env)); }
+
+  let noop = false;
+  if (wantsEdit(t, scene)) {
+    const r = runEdit(scene, t, orig);
+    if (r.handled) return r.result;
+    noop = !!r.noop;
+  }
+
+  if (/\b(remove|delete|take away|get rid of|pop|erase|trash)\b/.test(t) && !/\b(fog|sky|ground|floor|shadow|axes|stars|spot ?lights?|lights?)\b/.test(t)) {
+    if (!scene.objects.length) return info('Nothing to remove.');
+    if (shapesInText.length) return info(`I couldn't find a matching ${shapeLabel(shapesInText[0].shape)} to remove.`);
+    const gone = scene.objects.pop();
+    return ok(`Removed last shape (${shapeLabel(gone.shape)}).`);
+  }
+
+  if (has(t, DATA.INSPECT_PHRASES) && !shapesInText.length) {
+    const env = [scene.ground && 'ground', scene.fog && 'fog', scene.stars && 'stars', scene.axes && 'axes', scene.shadows && 'shadows'].filter(Boolean);
+    if (!scene.objects.length) return info('Scene is empty — no objects yet.' + (env.length ? ` Environment: ${env.join(', ')}.` : ''));
+    return ok(`${scene.objects.length} object(s):\n` + scene.objects.map((o, i) => `${i + 1}. ${describe(o)}${details(o)} at ${fmtPos(o.position)}`).join('\n') + (env.length ? `\nEnvironment: ${env.join(', ')}.` : ''));
+  }
+
+  if (!shapesInText.length) {
+    if (/\b(remove|delete|clear|no)\b/.test(t) && /\bspot ?lights?\b|\bextra lights\b/.test(t)) { scene.spots = 0; return ok('Spotlights removed.'); }
+    if (has(t, DATA.LIGHT_SPOT)) { if (scene.spots >= 3) return info("Already have 3 spotlights — say 'remove spotlights' to reset."); scene.spots += 1; return ok('Added spotlight above the scene.'); }
+    for (const [preset, phrases] of [['night', DATA.LIGHT_NIGHT], ['sunrise', DATA.LIGHT_SUNRISE], ['day', DATA.LIGHT_DAY]]) {
+      if (has(t, phrases) || (preset === 'day' && /\bsun\b/.test(t))) return setLighting(scene, preset);
     }
+    if (has(t, DATA.LIGHT_NEON)) return setLighting(scene, 'neon');
+    if (has(t, DATA.LIGHT_BRIGHT)) return setLighting(scene, 'brighter');
+    if (has(t, DATA.LIGHT_DIM)) return setLighting(scene, 'dimmer');
 
-    case 'inspect': {
-      if (!scene.objects.length) return info('Scene is empty — no objects yet.');
-      const lines = scene.objects.map((o, i) => `${i + 1}. ${o.colorName} ${o.shape} at (${o.position.map((n) => n.toFixed(1)).join(', ')})`);
-      return ok(`${scene.objects.length} object(s):\n` + lines.join('\n'));
-    }
-
-    case 'load_archive': return { status: 'pending', archiveKey: r.key };
-
-    case 'lighting': {
-      const p = LIGHT_PRESETS[r.preset];
-      scene.sky = [...p.sky];
-      scene.lights = p.lights.map((l) => [...l]);
-      scene.lightsDirty = true;
-      return ok(`Lighting set to '${r.preset}'.`);
-    }
-
-    case 'add_light':
-      if (scene.spots >= 3) return info("Already have 3 spotlights — say 'clear' to reset lighting.");
-      scene.spots += 1;
-      return ok('Added spotlight above the scene.');
-
-    case 'camera':
-      scene.viewpoint = VIEWPOINTS[r.view];
-      return ok(`Camera set to ${r.view} view.`);
-
-    case 'animate': {
-      if (r.anim === 'stop') { scene.objects.forEach((o) => { o.anim = null; }); return ok('Animation stopped.'); }
+    const an = parseAnimations(t);
+    if (STOP_RE.test(t) || an.types.length) {
+      if (STOP_RE.test(t)) { scene.objects.forEach((o) => { normObj(o); o.anims = an.types.length ? o.anims.filter((a) => !an.types.includes(a.type)) : []; }); return ok('Animation stopped.'); }
       if (!scene.objects.length) return info('No objects in scene to animate.');
-      scene.objects[scene.objects.length - 1].anim = r.anim;
-      return ok(`Applied ${r.anim} animation to last object.`);
-    }
-
-    case 'add': {
-      if (r.ambiguous) return info("Not sure what shape you want — try: 'add a red sphere to the left', 'place a gold torus above', or check the Chips tab.");
-      const positions = r.count > 1 ? multiPositions(r.count, r.arrangement, r.position, r.size) : [r.position];
-      const cname = colorName(r.color);
-      positions.forEach((pos) => {
-        const id = scene.objects.length;
-        const { xml, baseScale } = buildShape(r.shape, r.color, pos, r.size, r.rotation, r.transparency, id);
-        scene.objects.push({
-          shape: r.shape, colorName: cname, color: r.color, position: pos, size: r.size,
-          rotation: r.rotation, transparency: r.transparency, baseScale, xml, anim: r.animation,
-        });
-      });
-      return ok(r.message);
+      const last = scene.objects[scene.objects.length - 1];
+      setAnims(last, an.types, an.speed, an.dir);
+      return ok(`Applied ${an.types.join(' + ')} to the last object (${describe(last)}).`);
     }
   }
-  return info("Try: 'place a red sphere to the left'");
+
+  if (noop) return info("I found the object but wasn't sure what to change. Try: bigger, red, metallic, move up, spin, delete.");
+  return runAdd(scene, t, orig);
 }
 
-return { DATA, Scene, runCommand };
+function setLighting(scene, preset) {
+  const p = LIGHT_PRESETS[preset];
+  scene.sky = [...p.sky]; scene.skyGrad = null;
+  scene.lights = p.lights.map((l) => [...l]);
+  scene.lightsDirty = true;
+  return { status: 'success', message: `Lighting set to '${preset}'.` };
+}
+
+/** Applies a prompt to the scene. Returns { status, message } (status 'pending' means: load an archive scene). */
+function runCommand(scene, text) {
+  const before = JSON.stringify(scene);
+  const r = execute(scene, text);
+  if (r.status === 'success' && !r.noHistory) scene.pushUndo(before);
+  return r;
+}
+
+return { DATA, Scene, runCommand, describe, details };
 })();
 
 /* ═══ Kähler surface generators ═══ */
@@ -1166,7 +1906,7 @@ const SURFACES = {
     build: (p) => taubNut(p) },
   eguchi_hanson: { label: 'Eguchi-Hanson Space', category: 'hyperkähler', eq: 'f² = 1 − (a/r)⁴', curv: 'Ric=0, |Rm|²∝(a/r)⁸', hol: 'Sp(1)',
     param: 'a', paramNote: 'a = bolt radius — curvature concentrates at the S² bolt at r = a',
-    desc: 'The simplest ALE gravitational instanton — a hyperkähler metric on T*CP⁴. Contains a 2-sphere bolt at r=a. Curvature decays as r⁻⁸ away from the bolt.',
+    desc: 'The simplest ALE gravitational instanton — a hyperkähler metric on T*CP¹. Contains a 2-sphere bolt at r=a. Curvature decays as r⁻⁸ away from the bolt.',
     build: (p) => eguchiHanson(52, p) },
   cy_quintic: { label: 'Calabi-Yau Quintic (slice)', category: 'hyperkähler', eq: 'Σᵢ zᵢ⁵ = 0 ⊂ CP⁴', curv: 'Ric = 0', hol: 'SU(3)', param: null,
     desc: 'Real 2-slice of the Fermat quintic — the most-studied compact CY threefold in string theory (h¹¹=1, h²¹=101). Color encodes |Ω|², the holomorphic 3-form.',
@@ -1198,7 +1938,7 @@ function buildX3D(id, param = 1.0) {
 <X3D profile="Immersive" version="3.3">
   <Scene>
     <Background skyColor="${sky}"/>
-    <NavigationInfo type="EXAMINE ANY"/>
+    <NavigationInfo type='"EXAMINE" "ANY"'/>
     <DirectionalLight direction="-1 -2 -1" intensity="1.2"/>
     <DirectionalLight direction="1 1 0.5" intensity="0.5" color="0.8 0.85 1"/>
     <Viewpoint position="0 0 9" orientation="0 1 0 0"/>
@@ -1274,7 +2014,7 @@ function refreshObjList() {
     el.append(Object.assign(document.createElement('em'), { textContent: 'Empty', style: 'color:#666' }));
     return;
   }
-  scene.objects.forEach((o, i) => el.append(Object.assign(document.createElement('div'), { className: 'obj-item', textContent: `${i + 1}. ${o.colorName} ${o.shape}` })));
+  scene.objects.forEach((o, i) => el.append(Object.assign(document.createElement('div'), { className: 'obj-item', textContent: `${i + 1}. ${Agent.describe(o)}${Agent.details(o)}` })));
 }
 $('objToggle').addEventListener('click', () => {
   const open = $('objList').hidden;
@@ -1301,6 +2041,7 @@ async function loadArchive(key) {
     const res = await fetch(url, { signal: ctl.signal });
     clearTimeout(timer);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    scene.checkpoint();
     scene.reset();
     scene.raw = await res.text();
     return { status: 'success', message: `Loaded archive scene: ${key}` };
@@ -1324,18 +2065,25 @@ async function run(override) {
   finally { runBtn.disabled = false; }
 }
 runBtn.addEventListener('click', () => run());
-$('clearBtn').addEventListener('click', () => { scene.reset(); addLog('sys', 'System', 'Scene cleared.'); render(); });
+$('clearBtn').addEventListener('click', () => { scene.checkpoint(); scene.reset(); addLog('sys', 'System', 'Scene cleared.'); render(); });
 inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(); } });
 document.addEventListener('click', (e) => { const el = e.target.closest('[data-cmd]'); if (el) run(el.dataset.cmd); });
 
 const CHIPS = [
-  ['Shapes', '', [['red sphere', 'place a red sphere to the left'], ['gold torus', 'spawn a huge gold torus in the center'], ['floating cube', 'create a tiny cyan cube floating'], ['purple cone', 'drop a purple cone to the right'], ['icosahedron', 'make a neon green icosahedron'], ['star', 'place a gold star overhead'], ['octahedron', 'spawn a crimson octahedron to the right'], ['helix', 'add a rose gold spiral up high'], ['arrow', 'drop a tilted orange arrow in front'], ['ground plane', 'put a white plane below'], ['capsule', 'add a silver capsule to the left'], ['dodecahedron', 'spawn a jade dodecahedron'], ['cross', 'place a gold cross in the center'], ['crescent', 'add a cyan crescent above'], ['torus knot', 'spawn a neon blue torus knot']]],
-  ['Multi-shape', 'blue', [['5 spheres row', 'add 5 red spheres in a row'], ['8 cubes circle', 'spawn 8 blue cubes in a circle'], ['6 stars grid', 'create 6 gold stars in a grid'], ['4 cones random', 'place 4 cyan cones scattered']]],
-  ['Animation', 'yellow', [['spin last', 'spin'], ['bounce last', 'bounce'], ['pulse last', 'pulse'], ['stop anim', 'stop animation']]],
-  ['Lighting', 'green', [['day', 'day'], ['night', 'night'], ['sunrise', 'sunrise'], ['neon', 'neon lights'], ['brighter', 'brighter'], ['dimmer', 'dimmer'], ['spotlight', 'add spotlight']]],
-  ['Camera', '', [['reset', 'reset camera'], ['top', 'top view'], ['front', 'front view'], ['side', 'side view'], ['iso', 'isometric view']]],
+  ['Basic shapes', '', [['red sphere', 'add a red sphere to the left'], ['blue cube', 'add a blue cube to the right'], ['gold cone', 'add a gold cone above'], ['cylinder', 'add a silver cylinder'], ['gold torus', 'add a huge gold torus in the center'], ['capsule', 'add a silver capsule to the left'], ['ellipsoid', 'add a pink ellipsoid'], ['plane', 'add a white plane below'], ['star', 'add a gold star above'], ['crescent', 'add a cyan crescent above'], ['arrow', 'add a tilted orange arrow in front'], ['cross', 'add a gold cross']]],
+  ['Solids', '', [['tetrahedron', 'add a coral tetrahedron'], ['octahedron', 'add a crimson octahedron'], ['icosahedron', 'add a neon green icosahedron'], ['dodecahedron', 'add a jade dodecahedron'], ['pyramid', 'add a sand pyramid'], ['prism', 'add a teal prism'], ['wedge', 'add an orange wedge'], ['dome', 'add a white dome'], ['bowl', 'add a blue bowl'], ['disc', 'add a gold disc'], ['washer', 'add a silver washer'], ['hollow tube', 'add a hollow tube'], ['gem', 'add a cyan gem'], ['crystal', 'add a purple crystal']]],
+  ['Objects', 'blue', [['house', 'add a red house'], ['tree', 'add a green tree'], ['tower', 'add a gray tower'], ['rocket', 'add a white rocket'], ['vase', 'add a teal vase'], ['mushroom', 'add a red mushroom'], ['snowman', 'add a white snowman'], ['table', 'add a brown table'], ['chair', 'add a brown chair'], ['stairs', 'add gray stairs'], ['arch', 'add a stone arch'], ['heart', 'add a red heart'], ['gear', 'add a shiny silver gear'], ['text', 'add text saying "Hello World" above']]],
+  ['Math & knots', 'green', [['möbius strip', 'add a mobius strip'], ['klein bottle', 'add a klein bottle'], ['saddle', 'add a saddle'], ['catenoid', 'add a catenoid'], ['helicoid', 'add a helicoid'], ['pseudosphere', 'add a pseudosphere'], ['ripples', 'add a ripple'], ['terrain', 'add a green terrain'], ['seashell', 'add a seashell'], ['helix', 'add a rose gold spiral up high'], ['torus knot', 'add a neon blue torus knot'], ['cinquefoil', 'add a cinquefoil knot'], ['tesseract', 'add a purple tesseract']]],
+  ['Materials', 'yellow', [['metallic', 'make it metallic'], ['glossy', 'make it glossy'], ['matte', 'make it matte'], ['glowing', 'make it glow'], ['transparent', 'make it transparent'], ['wireframe', 'make it a wireframe'], ['solid', 'make it solid'], ['checkered', 'make it checkered'], ['striped', 'make it striped'], ['polka dots', 'make it polka dotted'], ['rainbow', 'make it rainbow'], ['gradient', 'make it a gradient from red to blue']]],
+  ['Colors', 'red', [['red', 'paint it red'], ['dark blue', 'paint it dark blue'], ['pastel pink', 'paint it pastel pink'], ['neon green', 'paint it neon green'], ['rose gold', 'paint it rose gold'], ['teal', 'paint it teal'], ['coral', 'paint it coral'], ['indigo', 'paint it indigo'], ['#ff6600', 'paint it #ff6600']]],
+  ['Layouts', 'blue', [['row', 'add 5 red spheres in a row'], ['circle', 'add 8 blue cubes in a circle'], ['grid', 'add 9 gold stars in a grid'], ['scattered', 'add 6 cyan cones scattered'], ['spiral', 'add 24 pink spheres in a spiral'], ['helix', 'add 20 green cubes in a helix'], ['pyramid', 'add 10 gold spheres in a pyramid'], ['wall', 'add 12 orange cubes in a wall'], ['wave', 'add 12 teal spheres in a wave'], ['sphere', 'add 30 small white spheres in a sphere'], ['cloud', 'add 25 small silver spheres in a cloud'], ['tower', 'add 6 red cubes in a stack']]],
+  ['Edit', '', [['bigger', 'make it bigger'], ['smaller', 'make it smaller'], ['taller', 'make it taller'], ['wider', 'make it wider'], ['up', 'move it up'], ['down', 'move it down'], ['left', 'move it left'], ['right', 'move it right'], ['rotate 45°', 'rotate it 45 degrees'], ['duplicate', 'duplicate it'], ['delete', 'delete it'], ['next to…', 'add a gold sphere next to the first object']]],
+  ['Animation', 'yellow', [['spin', 'spin'], ['bounce', 'bounce'], ['pulse', 'pulse'], ['wobble', 'wobble'], ['orbit', 'orbit'], ['hover', 'hover'], ['shake', 'shake'], ['flip', 'flip'], ['swing', 'swing'], ['color cycle', 'cycle the colors'], ['fade', 'fade'], ['faster', 'make it faster'], ['slower', 'make it slower'], ['stop', 'stop animation']]],
+  ['Environment', 'green', [['ground', 'add ground'], ['grass', 'add grass'], ['checker floor', 'add a checkered floor'], ['grid floor', 'add a grid floor'], ['water', 'add water'], ['fog', 'add fog'], ['dense fog', 'add dense fog'], ['sunset sky', 'sunset sky'], ['day sky', 'blue sky'], ['night sky', 'night sky with stars'], ['space', 'space background'], ['shadows', 'add shadows'], ['axes', 'show axes'], ['reset env', 'reset environment']]],
+  ['Lighting', 'green', [['day', 'day'], ['night', 'night'], ['sunrise', 'sunrise'], ['neon', 'neon lights'], ['brighter', 'brighter'], ['dimmer', 'dimmer'], ['spotlight', 'add spotlight'], ['remove spots', 'remove spotlights']]],
+  ['Camera', '', [['reset', 'reset camera'], ['top', 'top view'], ['front', 'front view'], ['side', 'side view'], ['iso', 'isometric view'], ['zoom in', 'zoom in'], ['zoom out', 'zoom out'], ['look at last', 'look at the last object']]],
   ['Archive', 'red', [['hello world', 'load hello'], ['fog', 'load fog'], ['text', 'load text']]],
-  ['Scene', '', [['inspect', 'what is in the scene'], ['undo', 'undo'], ['clear', 'clear']]],
+  ['Scene', '', [['inspect', 'what is in the scene'], ['undo', 'undo'], ['redo', 'redo'], ['help', 'help'], ['clear', 'clear']]],
 ];
 CHIPS.forEach(([title, tone, items]) => {
   const g = document.createElement('div');
@@ -1359,7 +2107,7 @@ function renderSaves() {
       mk('Load', () => {
         const s = readJSON(STORE_SAVES, {})[name];
         if (!s) return addLog('error', 'Load', `No save named '${name}'.`);
-        scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); render();
+        scene.checkpoint(); scene.restore(s); addLog('ai', 'Load', `Loaded '${name}'.`); render();
       }),
       mk('Delete', () => { const all = readJSON(STORE_SAVES, {}); delete all[name]; writeJSON(STORE_SAVES, all); renderSaves(); }));
     el.append(row);
