@@ -54,6 +54,20 @@ header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 /* layout */
 .main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .viewport { flex: 1; min-height: 0; position: relative; background: #08090d; overflow: hidden; }
+.viewport img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 2;
+  transition: opacity 0.5s ease-in-out;
+  pointer-events: none;
+}
+.viewport img.loaded {
+  opacity: 0;
+  visibility: hidden;
+}
 x3d-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .panel { flex: none; display: flex; flex-direction: column; background: var(--panel); border-top: 1px solid var(--line);
   height: 46vh; overflow: hidden; padding-bottom: var(--sab); }
@@ -185,6 +199,7 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
 
   <div class="main">
     <div class="viewport">
+      <img id="viewportPoster" src="ChatGPT Image Aug 30, 2026 at 11_03_42 PM.png" alt="X3D Studio Loading..." />
       <x3d-canvas id="canvas" contentScale="auto" update="auto"></x3d-canvas>
       <div class="obj-list" id="objList" hidden><h2 class="cap">Scene objects</h2><div id="objListItems"></div></div>
     </div>
@@ -253,12 +268,26 @@ input[type=range] { flex: 1; height: 32px; accent-color: var(--accent); cursor: 
 function createViewer(canvas) {
   let browser = null;
   const ready = new Promise((resolve) => {
-    X3D(() => { browser = X3D.getBrowser(canvas); resolve(browser); });
+    X3D(() => { 
+      browser = X3D.getBrowser(canvas); 
+      resolve(browser); 
+    });
   });
 
   // Loads are serialised, and while one is in flight only the newest request is kept,
   // so rapid commands or a slider drag never build up a backlog of stale scenes.
-  let pending = null, pump = null;
+  let pending = null, pump = null, initialized = false;
+
+  function dismissPoster() {
+    if (initialized) return;
+    initialized = true;
+    const poster = document.getElementById('viewportPoster');
+    if (poster) {
+      poster.classList.add('loaded');
+      setTimeout(() => poster.remove(), 500); // Clean up from DOM after fade
+    }
+  }
+
   function show(xml) {
     pending = xml;
     if (!pump) {
@@ -270,7 +299,11 @@ function createViewer(canvas) {
             const b = await ready;
             const scene = await b.createX3DFromString(next);
             await b.replaceWorld(scene);
-          } catch (err) { console.error('X3D load failed:', err); }
+            dismissPoster(); // Hide PNG poster once first scene loads
+          } catch (err) { 
+            console.error('X3D load failed:', err); 
+            dismissPoster(); // Fallback so user isn't stuck on poster if error occurs
+          }
         }
         pump = null;
       })();
